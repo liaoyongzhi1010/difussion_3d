@@ -163,9 +163,18 @@ def supervisor_step(cfg: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
     idle_mem_below = int(runtime_cfg.get('idle_memory_used_mib_below', 2048))
     gpu_idle = gpu['utilization_gpu'] <= idle_util_below and gpu['memory_used_mib'] <= idle_mem_below
 
+    running_project_pids: set[int] = set()
+    for stage in cfg.get('stages', []):
+        for task in stage.get('tasks', []):
+            if not bool(task.get('enabled', True)):
+                continue
+            pid = find_running_pid(task, processes)
+            if pid is not None:
+                running_project_pids.add(pid)
+
     stages_state: list[dict[str, Any]] = []
     launches: list[str] = []
-    running_project_jobs = 0
+    running_project_jobs = len(running_project_pids)
     active_stage_name = ''
 
     for stage in cfg.get('stages', []):
@@ -182,7 +191,6 @@ def supervisor_step(cfg: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
             pid = find_running_pid(task, processes)
             complete = is_task_complete(task)
             if pid is not None:
-                running_project_jobs += 1
                 running_in_stage += 1
             if complete:
                 complete_count += 1

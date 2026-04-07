@@ -153,7 +153,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_hiddenfocus_b128_train2048/posterior_eval_visiblelocked_hiddenfocus_b128_test_p5_s20.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_hiddenfocus_b128_train2048/logs/posterior_eval_visiblelocked_hiddenfocus_b128_test_p5_s20.log
-
 - name: fullscene_control_train_eval
   max_parallel_jobs: 1
   tasks:
@@ -225,7 +224,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_fullscene_control_resume_b128_train2048/posterior_eval_fullscene_control_resume_b128_test_p5_s20.json
     log_path: outputs/real_data/pixarmesh_fullscene_control_resume_b128_train2048/logs/posterior_eval_fullscene_control_resume_b128_test_p5_s20.log
-
 - name: fullscene_control_speed_sweep
   max_parallel_jobs: 2
   tasks:
@@ -297,7 +295,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_fullscene_control_resume_b128_train2048/posterior_eval_fullscene_control_resume_b128_test_p5_s4.json
     log_path: outputs/real_data/pixarmesh_fullscene_control_resume_b128_train2048/logs/posterior_eval_fullscene_control_resume_b128_test_p5_s4.log
-
 - name: posterior_capacity_sweep_p20
   max_parallel_jobs: 2
   tasks:
@@ -505,7 +502,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_fullscene_control_resume_b128_train2048/posterior_eval_fullscene_control_resume_b128_test_p20_s4.json
     log_path: outputs/real_data/pixarmesh_fullscene_control_resume_b128_train2048/logs/posterior_eval_fullscene_control_resume_b128_test_p20_s4.log
-
 - name: posterior_capacity_sweep_p50
   max_parallel_jobs: 2
   tasks:
@@ -577,7 +573,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_fullscene_control_resume_b128_train2048/posterior_eval_fullscene_control_resume_b128_test_p50_s20.json
     log_path: outputs/real_data/pixarmesh_fullscene_control_resume_b128_train2048/logs/posterior_eval_fullscene_control_resume_b128_test_p50_s20.log
-
 - name: visible_locked_hiddenonly_ft
   max_parallel_jobs: 1
   tasks:
@@ -649,7 +644,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_hiddenonly_ft_b128_train2048/posterior_eval_visiblelocked_hiddenonly_ft_b128_test_p5_s20.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_hiddenonly_ft_b128_train2048/logs/posterior_eval_visiblelocked_hiddenonly_ft_b128_test_p5_s20.log
-
 - name: visible_locked_tradeoff_ft
   max_parallel_jobs: 1
   tasks:
@@ -789,7 +783,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_tradeoff_v025_ft_b128_train2048/posterior_eval_visiblelocked_tradeoff_v025_ft_b128_test_p5_s20.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_tradeoff_v025_ft_b128_train2048/logs/posterior_eval_visiblelocked_tradeoff_v025_ft_b128_test_p5_s20.log
-
 - name: visible_locked_attention_ft
   max_parallel_jobs: 1
   tasks:
@@ -861,7 +854,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p5_s20.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p5_s20.log
-
 - name: visible_locked_attention_sweep_ft
   max_parallel_jobs: 1
   tasks:
@@ -1001,7 +993,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0375_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v0375_ft_b128_test_p5_s20.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0375_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v0375_ft_b128_test_p5_s20.log
-
 - name: visible_locked_posterior_capacity_followup
   max_parallel_jobs: 1
   tasks:
@@ -1141,7 +1132,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0375_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v0375_ft_b128_test_p20_s20.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0375_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v0375_ft_b128_test_p20_s20.log
-
 - name: visible_locked_posterior_upperbound_followup
   max_parallel_jobs: 2
   tasks:
@@ -1213,12 +1203,11 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0375_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v0375_ft_b128_test_p50_s20.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0375_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v0375_ft_b128_test_p50_s20.log
-
 - name: visible_locked_rerank_followup
   max_parallel_jobs: 2
   tasks:
   - name: eval_visiblelocked_occbias_v050_ft_b128_test_p50_s20_rerank
-    enabled: true
+    enabled: false
     match_substring: posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p50_s20_rerank.json
     completion:
       type: file_exists
@@ -1252,7 +1241,7 @@ stages:
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p50_s20_rerank.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p50_s20_rerank.log
   - name: eval_visiblelocked_occbias_v050_ft_b128_test_p100_s20_rerank
-    enabled: true
+    enabled: false
     match_substring: posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p100_s20_rerank.json
     completion:
       type: file_exists
@@ -1286,7 +1275,7 @@ stages:
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p100_s20_rerank.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p100_s20_rerank.log
   - name: eval_visiblelocked_occbias_v050_ft_b128_test_p200_s20_rerank
-    enabled: true
+    enabled: false
     match_substring: posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p200_s20_rerank.json
     completion:
       type: file_exists
@@ -1319,7 +1308,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p200_s20_rerank.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v050_ft_b128_test_p200_s20_rerank.log
-
 - name: visible_locked_selector_train
   max_parallel_jobs: 1
   tasks:
@@ -1369,7 +1357,6 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b4_p8_train/selector_train_summary.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b4_p8_train/logs/selector_train.log
-
 - name: visible_locked_selector_test_eval
   max_parallel_jobs: 1
   tasks:
@@ -1413,3 +1400,95 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b4_p8_train/selector_test_summary.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b4_p8_train/logs/selector_test.log
+- name: visible_locked_selector_train_heavy
+  max_parallel_jobs: 1
+  tasks:
+  - name: train_visiblelocked_occbias_v050_selector_b8_p16_long
+    enabled: true
+    match_substring: selector_train_heavy_summary.json
+    completion:
+      type: summary_field_gte
+      path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/selector_train_heavy_summary.json
+      field: end_step
+      threshold: 4000
+    launch_command:
+    - /root/3d/generation/.venv/bin/python
+    - scripts/train/train_posterior_selector.py
+    - --generator-checkpoint
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt
+    - --packet-dir
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
+    - --config
+    - configs/diffusion/visible_locked_occbias_v050.yaml
+    - --data-config
+    - configs/data/3dfront_v1.yaml
+    - --runtime-config
+    - configs/runtime/gpu_smoke.yaml
+    - --sample-id-json
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json
+    - --train-split
+    - train
+    - --val-split
+    - val
+    - --batch-size
+    - 8
+    - --num-posterior-samples
+    - 16
+    - --eval-num-posterior-samples
+    - 32
+    - --num-inference-steps
+    - 20
+    - --train-steps
+    - 4000
+    - --eval-every-steps
+    - 250
+    - --save-every-steps
+    - 250
+    - --checkpoint-dir
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/checkpoints_posterior_selector
+    - --save-summary
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/selector_train_heavy_summary.json
+    log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/logs/selector_train_heavy.log
+- name: visible_locked_selector_test_eval_heavy
+  max_parallel_jobs: 1
+  tasks:
+  - name: eval_visiblelocked_occbias_v050_selector_b8_p16_long_test
+    enabled: true
+    match_substring: selector_test_heavy_summary.json
+    completion:
+      type: file_exists
+      path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/selector_test_heavy_summary.json
+    launch_command:
+    - /root/3d/generation/.venv/bin/python
+    - scripts/train/train_posterior_selector.py
+    - --generator-checkpoint
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt
+    - --packet-dir
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
+    - --config
+    - configs/diffusion/visible_locked_occbias_v050.yaml
+    - --data-config
+    - configs/data/3dfront_v1.yaml
+    - --runtime-config
+    - configs/runtime/gpu_smoke.yaml
+    - --sample-id-json
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json
+    - --train-split
+    - train
+    - --val-split
+    - ''
+    - --test-split
+    - test
+    - --batch-size
+    - 8
+    - --train-steps
+    - 0
+    - --eval-num-posterior-samples
+    - 32
+    - --num-inference-steps
+    - 20
+    - --resume-from
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/checkpoints_posterior_selector/latest.pt
+    - --save-summary
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/selector_test_heavy_summary.json
+    log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/logs/selector_test_heavy.log
