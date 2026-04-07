@@ -1,40 +1,58 @@
 # Amodal Scene Diffusion
 
-Research code for single-view conditioned 3D scene posterior modeling with two explicit factors:
+A research codebase for single-view conditioned 3D scene posterior modeling with an explicit factorization:
 
 - visible region: deterministic / strongly constrained reconstruction
 - occluded region: posterior diffusion generation
+- posterior selection: a learned selector trained on top of a frozen generator
 
-The current public code path also includes a learned posterior selector trained on top of a frozen generator, so the system can rank multiple hidden hypotheses instead of only averaging them.
+This repository is intended to be the long-term project root for training, evaluation, qualitative examples, and future fixes. The public layout follows a cleaner release-style structure instead of a raw experiment workspace.
+
+## Highlights
+
+- `src/` package layout for installable research code
+- explicit `configs/` for diffusion, selector, geometry, and pipeline runs
+- standalone `scripts/train/`, `scripts/eval/`, and `scripts/preprocess/` entrypoints
+- `examples/` shell scripts for common train/eval workflows
+- `docs/` notes for quickstart, dataset layout, and reproducibility
 
 ## Repository Layout
 
 ```text
 .
-├── configs/                  # training / eval / pipeline configs
+├── configs/                  # experiment configs
 │   ├── data/
 │   ├── diffusion/
 │   ├── geometry_vae/
 │   ├── pipeline/
 │   ├── preprocess/
 │   └── runtime/
+├── docs/                     # public-facing documentation
+├── examples/                 # runnable example commands and figure placeholders
 ├── scripts/
-│   ├── preprocess/           # dataset indexing / packet materialization
-│   ├── train/                # generator / selector / geometry VAE training
-│   ├── eval/                 # posterior evaluation and reranking metrics
-│   ├── analysis/             # analysis utilities
-│   └── ops/                  # watchdog / pipeline automation
+│   ├── preprocess/
+│   ├── train/
+│   ├── eval/
+│   ├── analysis/
+│   └── ops/
 ├── src/
-│   └── amodal_scene_diff/    # installable source package
+│   └── amodal_scene_diff/
+├── Makefile
+├── pyproject.toml
+├── requirements.txt
 └── README.md
 ```
 
-Large local artifacts are intentionally excluded from git:
+## What Is Included vs Excluded
+
+This repo tracks code, configs, and reproducibility instructions.
+
+It intentionally does **not** track large local artifacts such as:
 
 - `outputs/`
 - `data/`
 - `.venv/`
-- internal notes / task logs
+- internal notes and task scratch files
 
 ## Installation
 
@@ -45,69 +63,73 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-## Dataset Convention
-
-This repository expects pre-materialized scene packet files (`*.pt`) and a split file mapping `train / val / test` to sample ids.
-
-Example local paths used by the experiments:
-
-- packet root: `outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets`
-- split file: `outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json`
-
-The dataset itself is not bundled into the repository.
-
-## Main Training Entrypoints
-
-### 1. Train the scene diffusion generator
+You can also use:
 
 ```bash
-PYTHONPATH=src python scripts/train/train_scene_diffusion.py \
-  --config configs/diffusion/visible_locked_occbias_v050.yaml \
-  --data-config configs/data/3dfront_v1.yaml \
-  --runtime-config configs/runtime/gpu_smoke.yaml \
-  --packet-dir outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
+make install
 ```
 
-### 2. Train the posterior selector on top of a frozen generator
+## Quick Start
+
+See the following docs first:
+
+- [`docs/quickstart.md`](/root/3d/generation/docs/quickstart.md)
+- [`docs/dataset_layout.md`](/root/3d/generation/docs/dataset_layout.md)
+- [`docs/reproducibility.md`](/root/3d/generation/docs/reproducibility.md)
+
+## Main Entry Points
+
+### Train the scene diffusion generator
 
 ```bash
-PYTHONPATH=src python scripts/train/train_posterior_selector.py \
-  --generator-checkpoint outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt \
-  --packet-dir outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets \
-  --config configs/diffusion/visible_locked_occbias_v050.yaml \
-  --data-config configs/data/3dfront_v1.yaml \
-  --runtime-config configs/runtime/gpu_smoke.yaml \
-  --sample-id-json outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json \
-  --train-split train \
-  --val-split val \
-  --test-split test
+make train-generator \
+  PACKET_DIR=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
 ```
 
-### 3. Evaluate posterior samples and reranking statistics
+### Train the posterior selector
 
 ```bash
-PYTHONPATH=src python scripts/eval/eval_scene_posterior.py \
-  --checkpoint outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt \
-  --packet-dir outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets \
-  --config configs/diffusion/visible_locked_occbias_v050.yaml \
-  --data-config configs/data/3dfront_v1.yaml \
-  --runtime-config configs/runtime/gpu_smoke.yaml \
-  --sample-id-json outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json \
-  --split test
+make train-selector \
+  PACKET_DIR=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets \
+  SPLIT_JSON=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json \
+  GENERATOR_CKPT=outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt
 ```
 
-## Key Release Files
+### Evaluate posterior samples and reranking
+
+```bash
+make eval-posterior \
+  PACKET_DIR=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets \
+  SPLIT_JSON=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json \
+  GENERATOR_CKPT=outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt
+```
+
+## Canonical Release Files
 
 - generator model: `src/amodal_scene_diff/models/diffusion/scene_denoising_transformer.py`
-- generator training: `scripts/train/train_scene_diffusion.py`
-- selector training: `scripts/train/train_posterior_selector.py`
+- generator trainer: `scripts/train/train_scene_diffusion.py`
+- selector trainer: `scripts/train/train_posterior_selector.py`
 - posterior evaluation: `scripts/eval/eval_scene_posterior.py`
-- staged pipeline: `configs/pipeline/visible_locked_compare.yaml`
+- staged pipeline config: `configs/pipeline/visible_locked_compare.yaml`
 
-## Reproducibility Notes
+## Examples
 
-- source package layout follows the `src/` convention
-- experiment configs are separated from Python code
-- local artifacts are excluded from git
-- all main experiments are runnable from explicit script entrypoints
+Runnable command examples live in:
 
+- [`examples/train_generator_full.sh`](/root/3d/generation/examples/train_generator_full.sh)
+- [`examples/train_selector_full.sh`](/root/3d/generation/examples/train_selector_full.sh)
+- [`examples/eval_posterior_full.sh`](/root/3d/generation/examples/eval_posterior_full.sh)
+- [`examples/smoke_selector.sh`](/root/3d/generation/examples/smoke_selector.sh)
+
+Qualitative figure placeholders live under:
+
+- [`examples/figures/README.md`](/root/3d/generation/examples/figures/README.md)
+- [`docs/figures/README.md`](/root/3d/generation/docs/figures/README.md)
+
+## Reproducibility Conventions
+
+- `src/` layout for clean imports
+- configs separated from code
+- public examples are command-first, not notebook-first
+- large local artifacts are ignored from git
+- repository can be patched and re-pushed as experiments evolve
