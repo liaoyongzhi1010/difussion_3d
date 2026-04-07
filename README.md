@@ -126,6 +126,16 @@ Qualitative figure placeholders live under:
 - [`examples/figures/README.md`](/root/3d/generation/examples/figures/README.md)
 - [`docs/figures/README.md`](/root/3d/generation/docs/figures/README.md)
 
+## Repository Policy
+
+The GitHub repository is the single mainline project for all future work.
+
+- training, evaluation, visualization, and example export should all be driven from this repository
+- bug fixes and method iterations should be implemented here, validated here, and pushed back here
+- representative example figures and lightweight result summaries may be committed when useful
+
+See [`CONTRIBUTING.md`](/root/3d/generation/CONTRIBUTING.md) for the explicit project policy.
+
 ## Reproducibility Conventions
 
 - `src/` layout for clean imports
