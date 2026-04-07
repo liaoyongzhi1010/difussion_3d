@@ -1,0 +1,9 @@
+runtime:
+  poll_seconds: 60
+  log_path: outputs/pipeline_watchdog.log
+  state_path: outputs/pipeline_watchdog_state.json
+pipelines:
+  - name: single_view_scene
+    config: configs/pipeline/single_view_scene.yaml
+  - name: visible_locked_compare
+    config: configs/pipeline/visible_locked_compare.yaml

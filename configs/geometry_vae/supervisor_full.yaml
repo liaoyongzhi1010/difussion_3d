@@ -1,0 +1,39 @@
+runtime:
+  workdir: /root/3d/generation
+  python_bin: /root/3d/generation/.venv/bin/python
+  poll_seconds: 120
+  max_parallel_jobs: 2
+  idle_gpu_util_below: 10
+  idle_memory_used_mib_below: 2048
+  log_path: outputs/real_data/geometry_vae_objects_v1_full/logs/geometry_vae_supervisor.log
+  state_path: outputs/real_data/geometry_vae_objects_v1_full/geometry_vae_supervisor_state.json
+  env:
+    PYTHONPATH: src
+
+experiments:
+  - name: geometry_vae_bs256_fullresume
+    enabled: true
+    config: configs/geometry_vae/base.yaml
+    runtime_config: configs/runtime/gpu_smoke.yaml
+    object_root: outputs/real_data/geometry_vae_objects_v1_full
+    batch_size: 256
+    target_epochs: 800
+    checkpoint_dir: outputs/real_data/geometry_vae_objects_v1_full/checkpoints_geometry_vae_bs256_fullresume
+    save_summary: outputs/real_data/geometry_vae_objects_v1_full/geometry_vae_bs256_fullresume_summary.json
+    log_path: outputs/real_data/geometry_vae_objects_v1_full/logs/geometry_vae_bs256_fullresume.log
+    bootstrap_checkpoint: outputs/real_data/geometry_vae_objects_v1_full/checkpoints_geometry_vae_bs256/epoch_0400.pt
+    save_every_epochs: 20
+    seed: 42
+  - name: geometry_vae_heavy_fullresume
+    enabled: true
+    config: configs/geometry_vae/heavy.yaml
+    runtime_config: configs/runtime/gpu_smoke.yaml
+    object_root: outputs/real_data/geometry_vae_objects_v1_full
+    batch_size: 96
+    target_epochs: 600
+    checkpoint_dir: outputs/real_data/geometry_vae_objects_v1_full/checkpoints_geometry_vae_heavy_fullresume
+    save_summary: outputs/real_data/geometry_vae_objects_v1_full/geometry_vae_heavy_fullresume_summary.json
+    log_path: outputs/real_data/geometry_vae_objects_v1_full/logs/geometry_vae_heavy_fullresume.log
+    bootstrap_checkpoint: outputs/real_data/geometry_vae_objects_v1_full/checkpoints_geometry_vae_heavy/epoch_0300.pt
+    save_every_epochs: 20
+    seed: 42

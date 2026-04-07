@@ -1,0 +1,1 @@
+"""AmodalSceneDiff research package."""

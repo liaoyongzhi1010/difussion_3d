@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local artifacts
+outputs/
+data/
+notes/
+TASKS.md
+monitor_gpu.sh
+
+# Checkpoints / model artifacts
+*.pt
+*.pth
+*.ckpt
+
+# Logs
+*.log
+nohup.out
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

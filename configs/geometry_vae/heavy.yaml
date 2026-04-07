@@ -1,0 +1,53 @@
+model:
+  name: geometry_vae_v1_heavy
+  latent_dim: 256
+  encoder:
+    type: pointnet_mlp
+    input_dim: 6
+    num_surface_points: 2048
+    hidden_dims: [96, 192, 384, 512]
+  decoder:
+    type: triplane_sdf
+    triplane_feat_dim: 24
+    triplane_res_xy: 48
+    num_planes: 3
+    query_hidden_dims: [384, 384, 192]
+    output: sdf_plus_occ
+  export:
+    mc_resolution_trainvis: 96
+    mc_resolution_val: 128
+    mc_bbox_min: -1.05
+    mc_bbox_max: 1.05
+    iso_level: 0.0
+
+data:
+  dataset: 3dfront_objects_v1
+  source_parquet_dir: outputs/real_data/hf_cache/data
+  metadata_zip: outputs/real_data/depr_hf_cache/metadata.zip
+  object_cache_root: outputs/real_data/geometry_vae_objects_v1_full
+  canonical_unit_box: 2.0
+  watertight_required: false
+  num_surface_points: 2048
+  num_query_points: 4096
+  near_surface_ratio: 0.7
+  near_surface_sigma: 0.02
+  uniform_range: 1.05
+
+training:
+  optimizer: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 96
+  grad_accum: 1
+  epochs: 300
+  warmup_steps: 2000
+  lr_schedule: cosine
+  mixed_precision: bf16
+  clip_grad_norm: 1.0
+  kl_anneal_steps: 10000
+
+loss:
+  lambda_kl: 1.0e-4
+  lambda_sdf: 1.0
+  lambda_occ: 1.0
+  lambda_normal: 0.1

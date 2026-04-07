@@ -1,0 +1,13 @@
+seed: 42
+device: cuda
+num_workers: 0
+pin_memory: false
+preload_packets: true
+persistent_workers: false
+prefetch_factor: 2
+non_blocking_device_transfer: false
+spatial_placeholder_size: 1
+batch_size: 4
+max_samples: 63
+log_level: info
+dry_run_dummy_batch: false
