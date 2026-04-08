@@ -53,6 +53,43 @@ class PosteriorSelector(nn.Module):
         return sum(param.numel() for param in self.parameters())
 
 
+def _infer_selector_config_from_checkpoint(
+    checkpoint: dict[str, Any],
+    args: argparse.Namespace,
+) -> tuple[int, int, int, float]:
+    selector_cfg = checkpoint.get("selector_cfg")
+    if isinstance(selector_cfg, dict):
+        return (
+            int(selector_cfg.get("input_dim", 5)),
+            int(selector_cfg.get("hidden_dim", args.selector_hidden_dim)),
+            int(selector_cfg.get("depth", args.selector_depth)),
+            float(selector_cfg.get("dropout", args.selector_dropout)),
+        )
+
+    model_state = checkpoint.get("model_state", {})
+    linear_layers: list[tuple[int, torch.Size]] = []
+    if isinstance(model_state, dict):
+        for key, value in model_state.items():
+            if not key.startswith("network.") or not key.endswith(".weight") or not torch.is_tensor(value) or value.ndim != 2:
+                continue
+            parts = key.split(".")
+            if len(parts) < 3:
+                continue
+            try:
+                layer_index = int(parts[1])
+            except ValueError:
+                continue
+            linear_layers.append((layer_index, value.shape))
+    linear_layers.sort(key=lambda item: item[0])
+    if not linear_layers:
+        return 5, int(args.selector_hidden_dim), int(args.selector_depth), float(args.selector_dropout)
+
+    input_dim = int(linear_layers[0][1][1])
+    depth = len(linear_layers)
+    hidden_dim = int(linear_layers[0][1][0]) if depth > 1 else int(args.selector_hidden_dim)
+    return input_dim, hidden_dim, depth, float(args.selector_dropout)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a posterior sample selector on top of a frozen scene generator.")
     parser.add_argument("--generator-checkpoint", required=True)
@@ -306,6 +343,7 @@ def _checkpoint_payload(
     step: int,
     cfg: dict[str, Any],
     metrics: dict[str, float],
+    selector_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = {
         "step": int(step),
@@ -320,6 +358,8 @@ def _checkpoint_payload(
     }
     if torch.cuda.is_available():
         payload["rng_state"]["cuda"] = torch.cuda.get_rng_state_all()
+    if selector_cfg is not None:
+        payload["selector_cfg"] = dict(selector_cfg)
     return payload
 
 
@@ -330,9 +370,10 @@ def _save_checkpoint(
     step: int,
     cfg: dict[str, Any],
     metrics: dict[str, float],
+    selector_cfg: dict[str, Any] | None = None,
 ) -> Path:
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    payload = _checkpoint_payload(model, optimizer, step, cfg, metrics)
+    payload = _checkpoint_payload(model, optimizer, step, cfg, metrics, selector_cfg=selector_cfg)
     step_path = checkpoint_dir / f"step_{step:07d}.pt"
     latest_path = checkpoint_dir / "latest.pt"
     torch.save(payload, step_path)
@@ -347,9 +388,10 @@ def _save_best_checkpoint(
     step: int,
     cfg: dict[str, Any],
     metrics: dict[str, float],
+    selector_cfg: dict[str, Any] | None = None,
 ) -> Path:
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    payload = _checkpoint_payload(model, optimizer, step, cfg, metrics)
+    payload = _checkpoint_payload(model, optimizer, step, cfg, metrics, selector_cfg=selector_cfg)
     best_path = checkpoint_dir / "best.pt"
     torch.save(payload, best_path)
     return best_path
@@ -494,13 +536,31 @@ def main() -> None:
     for parameter in generator.parameters():
         parameter.requires_grad_(False)
 
+    selector_input_dim = 5
+    selector_hidden_dim = int(args.selector_hidden_dim)
+    selector_depth = int(args.selector_depth)
+    selector_dropout = float(args.selector_dropout)
+    resume_metadata: dict[str, Any] | None = None
+    if args.resume_from:
+        resume_metadata = torch.load(args.resume_from, map_location="cpu")
+        selector_input_dim, selector_hidden_dim, selector_depth, selector_dropout = _infer_selector_config_from_checkpoint(
+            resume_metadata,
+            args,
+        )
+
     selector = PosteriorSelector(
-        input_dim=5,
-        hidden_dim=args.selector_hidden_dim,
-        depth=args.selector_depth,
-        dropout=args.selector_dropout,
+        input_dim=selector_input_dim,
+        hidden_dim=selector_hidden_dim,
+        depth=selector_depth,
+        dropout=selector_dropout,
     ).to(device)
     optimizer = torch.optim.AdamW(selector.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    selector_cfg = {
+        "input_dim": int(selector_input_dim),
+        "hidden_dim": int(selector_hidden_dim),
+        "depth": int(selector_depth),
+        "dropout": float(selector_dropout),
+    }
 
     start_step = 0
     if args.resume_from:
@@ -582,7 +642,15 @@ def main() -> None:
                 if checkpoint_dir is not None:
                     payload_metrics = dict(last_metrics)
                     payload_metrics.update({f"val_{key}": value for key, value in val_metrics.items()})
-                    best_path = _save_best_checkpoint(checkpoint_dir, selector, optimizer, global_step, cfg, payload_metrics)
+                    best_path = _save_best_checkpoint(
+                        checkpoint_dir,
+                        selector,
+                        optimizer,
+                        global_step,
+                        cfg,
+                        payload_metrics,
+                        selector_cfg=selector_cfg,
+                    )
                     best_checkpoint_path = str(best_path)
                     print(
                         json.dumps(
@@ -600,7 +668,15 @@ def main() -> None:
             payload_metrics = dict(last_metrics)
             if val_metrics:
                 payload_metrics.update({f"val_{key}": value for key, value in val_metrics.items()})
-            saved_path = _save_checkpoint(checkpoint_dir, selector, optimizer, global_step, cfg, payload_metrics)
+            saved_path = _save_checkpoint(
+                checkpoint_dir,
+                selector,
+                optimizer,
+                global_step,
+                cfg,
+                payload_metrics,
+                selector_cfg=selector_cfg,
+            )
             last_checkpoint_path = str(saved_path)
             print(json.dumps({"event": "checkpoint_saved", "step": global_step, "path": last_checkpoint_path}), flush=True)
 
@@ -626,6 +702,7 @@ def main() -> None:
         "start_step": int(start_step),
         "end_step": int(start_step + args.train_steps),
         "selector_num_parameters": int(selector.num_parameters),
+        "selector_cfg": selector_cfg,
         "packet_dir": str(args.packet_dir),
         "num_available_packet_files": int(len(all_packet_paths)),
         "num_train_packet_files": int(len(train_dataset)),
