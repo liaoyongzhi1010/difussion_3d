@@ -300,15 +300,13 @@ def _selector_metrics_from_logits(candidates: dict[str, torch.Tensor], logits: t
     }
 
 
-def _save_checkpoint(
-    checkpoint_dir: Path,
+def _checkpoint_payload(
     model: nn.Module,
     optimizer: torch.optim.Optimizer,
     step: int,
     cfg: dict[str, Any],
     metrics: dict[str, float],
-) -> Path:
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+) -> dict[str, Any]:
     payload = {
         "step": int(step),
         "cfg": cfg,
@@ -322,11 +320,39 @@ def _save_checkpoint(
     }
     if torch.cuda.is_available():
         payload["rng_state"]["cuda"] = torch.cuda.get_rng_state_all()
+    return payload
+
+
+def _save_checkpoint(
+    checkpoint_dir: Path,
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    step: int,
+    cfg: dict[str, Any],
+    metrics: dict[str, float],
+) -> Path:
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    payload = _checkpoint_payload(model, optimizer, step, cfg, metrics)
     step_path = checkpoint_dir / f"step_{step:07d}.pt"
     latest_path = checkpoint_dir / "latest.pt"
     torch.save(payload, step_path)
     shutil.copyfile(step_path, latest_path)
     return step_path
+
+
+def _save_best_checkpoint(
+    checkpoint_dir: Path,
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    step: int,
+    cfg: dict[str, Any],
+    metrics: dict[str, float],
+) -> Path:
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    payload = _checkpoint_payload(model, optimizer, step, cfg, metrics)
+    best_path = checkpoint_dir / "best.pt"
+    torch.save(payload, best_path)
+    return best_path
 
 
 def _load_checkpoint(checkpoint_path: str | Path, model: nn.Module, optimizer: torch.optim.Optimizer, device: str) -> dict[str, Any]:
@@ -489,6 +515,17 @@ def main() -> None:
     start_time = time.perf_counter()
     last_metrics: dict[str, float] = {}
     last_checkpoint_path = ""
+    best_checkpoint_path = ""
+    best_val_metrics: dict[str, float] = {}
+    best_step = 0
+    best_val_hidden_mse = float("inf")
+
+    if args.resume_from:
+        resume_metrics = resume_payload.get("metrics", {})
+        if isinstance(resume_metrics, dict) and "val_selected_hidden_mse" in resume_metrics:
+            best_val_hidden_mse = float(resume_metrics["val_selected_hidden_mse"])
+            best_step = start_step
+            best_checkpoint_path = str(args.resume_from)
 
     for step_index in range(start_step, start_step + args.train_steps):
         global_step = step_index + 1
@@ -537,6 +574,27 @@ def main() -> None:
                 max_batches=args.max_eval_batches,
             )
             print(json.dumps({"event": "val_eval", "step": global_step, "metrics": val_metrics}), flush=True)
+            current_val_hidden = val_metrics.get("selected_hidden_mse") if val_metrics else None
+            if current_val_hidden is not None and float(current_val_hidden) < best_val_hidden_mse:
+                best_val_hidden_mse = float(current_val_hidden)
+                best_val_metrics = dict(val_metrics)
+                best_step = global_step
+                if checkpoint_dir is not None:
+                    payload_metrics = dict(last_metrics)
+                    payload_metrics.update({f"val_{key}": value for key, value in val_metrics.items()})
+                    best_path = _save_best_checkpoint(checkpoint_dir, selector, optimizer, global_step, cfg, payload_metrics)
+                    best_checkpoint_path = str(best_path)
+                    print(
+                        json.dumps(
+                            {
+                                "event": "best_checkpoint_saved",
+                                "step": global_step,
+                                "path": best_checkpoint_path,
+                                "selected_hidden_mse": best_val_hidden_mse,
+                            }
+                        ),
+                        flush=True,
+                    )
 
         if checkpoint_dir is not None and ((global_step % save_every == 0) or (global_step == start_step + args.train_steps)):
             payload_metrics = dict(last_metrics)
@@ -547,6 +605,8 @@ def main() -> None:
             print(json.dumps({"event": "checkpoint_saved", "step": global_step, "path": last_checkpoint_path}), flush=True)
 
     if test_loader is not None:
+        if best_checkpoint_path:
+            _load_checkpoint(best_checkpoint_path, selector, optimizer, device)
         test_metrics = _evaluate_selector(
             selector,
             generator,
@@ -577,6 +637,9 @@ def main() -> None:
         "train_metrics": last_metrics,
         "val_metrics": val_metrics,
         "test_metrics": test_metrics,
+        "best_step": int(best_step),
+        "best_val_metrics": best_val_metrics,
+        "best_checkpoint_path": best_checkpoint_path,
         "last_checkpoint_path": last_checkpoint_path,
         "resume_from": str(args.resume_from),
     }

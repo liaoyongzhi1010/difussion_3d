@@ -1396,7 +1396,7 @@ stages:
     - --num-inference-steps
     - 20
     - --resume-from
-    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b4_p8_train/checkpoints_posterior_selector/latest.pt
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b4_p8_train/checkpoints_posterior_selector/best.pt
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b4_p8_train/selector_test_summary.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b4_p8_train/logs/selector_test.log
@@ -1488,7 +1488,109 @@ stages:
     - --num-inference-steps
     - 20
     - --resume-from
-    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/checkpoints_posterior_selector/latest.pt
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/checkpoints_posterior_selector/best.pt
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/selector_test_heavy_summary.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_b8_p16_long_train/logs/selector_test_heavy.log
+- name: visible_locked_selector_train_wide
+  max_parallel_jobs: 1
+  tasks:
+  - name: train_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15
+    enabled: true
+    match_substring: selector_train_wide_summary.json
+    completion:
+      type: summary_field_gte
+      path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15_train/selector_train_wide_summary.json
+      field: end_step
+      threshold: 3000
+    launch_command:
+    - /root/3d/generation/.venv/bin/python
+    - scripts/train/train_posterior_selector.py
+    - --generator-checkpoint
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt
+    - --packet-dir
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
+    - --config
+    - configs/diffusion/visible_locked_occbias_v050.yaml
+    - --data-config
+    - configs/data/3dfront_v1.yaml
+    - --runtime-config
+    - configs/runtime/gpu_smoke.yaml
+    - --sample-id-json
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json
+    - --train-split
+    - train
+    - --val-split
+    - val
+    - --batch-size
+    - 8
+    - --num-posterior-samples
+    - 16
+    - --eval-num-posterior-samples
+    - 32
+    - --num-inference-steps
+    - 20
+    - --train-steps
+    - 3000
+    - --lr
+    - 3e-4
+    - --target-temperature
+    - 1.5
+    - --selector-hidden-dim
+    - 256
+    - --selector-depth
+    - 4
+    - --selector-dropout
+    - 0.0
+    - --eval-every-steps
+    - 250
+    - --save-every-steps
+    - 250
+    - --checkpoint-dir
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15_train/checkpoints_posterior_selector
+    - --save-summary
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15_train/selector_train_wide_summary.json
+    log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15_train/logs/selector_train_wide.log
+- name: visible_locked_selector_test_eval_wide
+  max_parallel_jobs: 1
+  tasks:
+  - name: eval_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15_test
+    enabled: true
+    match_substring: selector_test_wide_summary.json
+    completion:
+      type: file_exists
+      path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15_train/selector_test_wide_summary.json
+    launch_command:
+    - /root/3d/generation/.venv/bin/python
+    - scripts/train/train_posterior_selector.py
+    - --generator-checkpoint
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt
+    - --packet-dir
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
+    - --config
+    - configs/diffusion/visible_locked_occbias_v050.yaml
+    - --data-config
+    - configs/data/3dfront_v1.yaml
+    - --runtime-config
+    - configs/runtime/gpu_smoke.yaml
+    - --sample-id-json
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json
+    - --train-split
+    - train
+    - --val-split
+    - ''
+    - --test-split
+    - test
+    - --batch-size
+    - 8
+    - --train-steps
+    - 0
+    - --eval-num-posterior-samples
+    - 32
+    - --num-inference-steps
+    - 20
+    - --resume-from
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15_train/checkpoints_posterior_selector/best.pt
+    - --save-summary
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15_train/selector_test_wide_summary.json
+    log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_selector_wide_b8_p16_h256_d4_t15_train/logs/selector_test_wide.log
