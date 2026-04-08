@@ -27,10 +27,10 @@ See [`dataset_layout.md`](/root/3d/generation/docs/dataset_layout.md).
 bash examples/smoke_selector.sh
 ```
 
-## 4. Run full training
+## 4. Run generator training
 
 ```bash
-bash examples/train_selector_full.sh
+bash examples/train_generator_full.sh
 ```
 
 ## 5. Run evaluation
@@ -39,7 +39,14 @@ bash examples/train_selector_full.sh
 bash examples/eval_posterior_full.sh
 ```
 
-## 6. Validate the repository entrypoints
+## 6. Build paper-facing outputs
+
+```bash
+bash examples/build_paper_report.sh
+bash examples/export_paper_examples.sh
+```
+
+## 7. Validate the repository entrypoints
 
 ```bash
 make check

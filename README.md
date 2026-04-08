@@ -14,7 +14,7 @@ This repository is intended to be the long-term project root for training, evalu
 - explicit `configs/` for diffusion, selector, geometry, and pipeline runs
 - standalone `scripts/train/`, `scripts/eval/`, and `scripts/preprocess/` entrypoints
 - `examples/` shell scripts for common train/eval workflows
-- `docs/` notes for quickstart, dataset layout, and reproducibility
+- `docs/` notes for quickstart, dataset layout, reproducibility, and current paper results
 
 ## Repository Layout
 
@@ -92,7 +92,7 @@ make train-generator \
 make train-selector \
   PACKET_DIR=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets \
   SPLIT_JSON=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json \
-  GENERATOR_CKPT=outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt
+  GENERATOR_CKPT=outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0034000.pt
 ```
 
 ### Evaluate posterior samples and reranking
@@ -101,7 +101,19 @@ make train-selector \
 make eval-posterior \
   PACKET_DIR=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets \
   SPLIT_JSON=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json \
-  GENERATOR_CKPT=outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt
+  GENERATOR_CKPT=outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0034000.pt
+```
+
+### Build paper tables and summary
+
+```bash
+make paper-report
+```
+
+### Export paper examples
+
+```bash
+make paper-examples
 ```
 
 ## Canonical Release Files
@@ -119,6 +131,8 @@ Runnable command examples live in:
 - [`examples/train_generator_full.sh`](/root/3d/generation/examples/train_generator_full.sh)
 - [`examples/train_selector_full.sh`](/root/3d/generation/examples/train_selector_full.sh)
 - [`examples/eval_posterior_full.sh`](/root/3d/generation/examples/eval_posterior_full.sh)
+- [`examples/build_paper_report.sh`](/root/3d/generation/examples/build_paper_report.sh)
+- [`examples/export_paper_examples.sh`](/root/3d/generation/examples/export_paper_examples.sh)
 - [`examples/smoke_selector.sh`](/root/3d/generation/examples/smoke_selector.sh)
 
 Qualitative figure placeholders live under:

@@ -925,6 +925,131 @@ stages:
     - --save-summary
     - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p5_s20.json
     log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p5_s20.log
+
+- name: visible_locked_paper_eval
+  max_parallel_jobs: 1
+  tasks:
+  - name: eval_visiblelocked_occbias_v0625_ft_b128_test_p20_s20
+    enabled: true
+    match_substring: posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p20_s20.json
+    completion:
+      type: file_exists
+      path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p20_s20.json
+    launch_command:
+    - /root/3d/generation/.venv/bin/python
+    - scripts/eval/eval_scene_posterior.py
+    - --checkpoint
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0034000.pt
+    - --packet-dir
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
+    - --config
+    - configs/diffusion/visible_locked_occbias_v0625.yaml
+    - --data-config
+    - configs/data/3dfront_v1.yaml
+    - --runtime-config
+    - configs/runtime/gpu_smoke.yaml
+    - --batch-size
+    - 8
+    - --max-samples
+    - 0
+    - --num-posterior-samples
+    - 20
+    - --num-inference-steps
+    - 20
+    - --sample-id-json
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json
+    - --split
+    - test
+    - --save-summary
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p20_s20.json
+    log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p20_s20.log
+  - name: eval_visiblelocked_occbias_v0625_ft_b128_test_p50_s20
+    enabled: true
+    match_substring: posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p50_s20.json
+    completion:
+      type: file_exists
+      path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p50_s20.json
+    launch_command:
+    - /root/3d/generation/.venv/bin/python
+    - scripts/eval/eval_scene_posterior.py
+    - --checkpoint
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0034000.pt
+    - --packet-dir
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
+    - --config
+    - configs/diffusion/visible_locked_occbias_v0625.yaml
+    - --data-config
+    - configs/data/3dfront_v1.yaml
+    - --runtime-config
+    - configs/runtime/gpu_smoke.yaml
+    - --batch-size
+    - 4
+    - --max-samples
+    - 0
+    - --num-posterior-samples
+    - 50
+    - --num-inference-steps
+    - 20
+    - --sample-id-json
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json
+    - --split
+    - test
+    - --save-summary
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p50_s20.json
+    log_path: outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/logs/posterior_eval_visiblelocked_occbias_v0625_ft_b128_test_p50_s20.log
+- name: visible_locked_paper_artifacts
+  max_parallel_jobs: 1
+  tasks:
+  - name: build_visiblelocked_occbias_v0625_paper_report
+    enabled: true
+    match_substring: paper_report_manifest.json
+    completion:
+      type: file_exists
+      path: outputs/tables/paper_report_manifest.json
+    launch_command:
+    - /root/3d/generation/.venv/bin/python
+    - scripts/analysis/build_paper_report.py
+    - --output-dir
+    - outputs/tables
+    - --summary-md
+    - docs/paper_results.md
+    - --manifest-path
+    - outputs/tables/paper_report_manifest.json
+    log_path: outputs/tables/build_paper_report.log
+  - name: export_visiblelocked_occbias_v0625_paper_examples
+    enabled: true
+    match_substring: paper_examples_manifest.json
+    completion:
+      type: file_exists
+      path: outputs/tables/paper_examples_manifest.json
+    launch_command:
+    - /root/3d/generation/.venv/bin/python
+    - scripts/analysis/export_paper_examples.py
+    - --checkpoint
+    - outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0034000.pt
+    - --packet-dir
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
+    - --config
+    - configs/diffusion/visible_locked_occbias_v0625.yaml
+    - --data-config
+    - configs/data/3dfront_v1.yaml
+    - --runtime-config
+    - configs/runtime/gpu_smoke.yaml
+    - --sample-id-json
+    - outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json
+    - --split
+    - test
+    - --output-dir
+    - examples/figures/visible_locked_occbias_v0625_main
+    - --manifest-path
+    - outputs/tables/paper_examples_manifest.json
+    - --top-k
+    - 6
+    - --num-posterior-samples
+    - 20
+    - --num-inference-steps
+    - 20
+    log_path: outputs/tables/export_paper_examples.log
 - name: visible_locked_attention_sweep_ft
   max_parallel_jobs: 1
   tasks:

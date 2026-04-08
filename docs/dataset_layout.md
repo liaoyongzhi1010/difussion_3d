@@ -40,7 +40,7 @@ outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_
 Selector training and posterior evaluation assume a frozen generator checkpoint, for example:
 
 ```text
-outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v050_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0030000.pt
+outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0034000.pt
 ```
 
 ## Important note
