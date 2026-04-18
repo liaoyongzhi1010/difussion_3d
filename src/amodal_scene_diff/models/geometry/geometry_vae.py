@@ -66,6 +66,16 @@ class TriPlaneDecoder(nn.Module):
         self.sdf_head = nn.Linear(query_hidden_dims[-1], 1)
         self.occ_head = nn.Linear(query_hidden_dims[-1], 1)
 
+    def decode_triplanes(self, z_sample: torch.Tensor) -> torch.Tensor:
+        batch = z_sample.shape[0]
+        return self.triplane_head(z_sample).view(
+            batch,
+            self.num_planes,
+            self.triplane_feat_dim,
+            self.triplane_res_xy,
+            self.triplane_res_xy,
+        )
+
     def _sample_plane(self, plane_feats: torch.Tensor, coords: torch.Tensor) -> torch.Tensor:
         grid = coords.unsqueeze(2)
         sampled = F.grid_sample(
@@ -87,14 +97,7 @@ class TriPlaneDecoder(nn.Module):
         return torch.cat([plane_xy, plane_xz, plane_yz], dim=-1)
 
     def forward(self, z_sample: torch.Tensor, query_points: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch, queries, _ = query_points.shape
-        triplanes = self.triplane_head(z_sample).view(
-            batch,
-            self.num_planes,
-            self.triplane_feat_dim,
-            self.triplane_res_xy,
-            self.triplane_res_xy,
-        )
+        triplanes = self.decode_triplanes(z_sample)
         query_feats = self._sample_triplanes(triplanes, query_points)
         query_inputs = torch.cat([query_feats, query_points], dim=-1)
         hidden = self.query_mlp(query_inputs)
@@ -129,6 +132,9 @@ class GeometryVAE(nn.Module):
         std = torch.exp(0.5 * z_logvar)
         eps = torch.randn_like(std)
         return z_mu + eps * std
+
+    def decode_triplanes(self, z_sample: torch.Tensor) -> torch.Tensor:
+        return self.decoder.decode_triplanes(z_sample)
 
     def forward(self, surface_points: torch.Tensor, surface_normals: torch.Tensor, query_points: torch.Tensor) -> GeometryVAEOutput:
         surface_inputs = torch.cat([surface_points, surface_normals], dim=-1)

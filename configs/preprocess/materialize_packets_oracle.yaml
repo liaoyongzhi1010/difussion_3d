@@ -1,7 +1,0 @@
-index_jsonl: data/metadata/3dfront_v1/index_v1/view_index.jsonl
-scaffold_root: data/cache/scaffold_oracle_v1
-geometry_root: data/cache/geometry_latents_v1
-output_root: data/cache/scene_packets_v1/oracle
-source_id: 0
-max_samples: 0
-allow_missing_geometry: false

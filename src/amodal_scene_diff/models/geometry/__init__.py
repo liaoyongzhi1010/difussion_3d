@@ -1,3 +1,3 @@
-from .geometry_vae import GeometryVAE
+from .geometry_vae import GeometryVAE, TriPlaneDecoder
 
-__all__ = ["GeometryVAE"]
+__all__ = ["GeometryVAE", "TriPlaneDecoder"]

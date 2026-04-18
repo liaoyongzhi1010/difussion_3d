@@ -1,16 +1,12 @@
 # Examples
 
-This directory contains runnable shell examples for the most common workflows.
+This directory now contains only the canonical single-view paper workflow.
 
-## Scripts
+## Mainline Scripts
 
-- `train_generator_full.sh`: full generator training command template
-- `train_selector_full.sh`: full selector training command template
-- `eval_posterior_full.sh`: posterior evaluation command template
-- `build_paper_report.sh`: generate paper-facing tables and markdown summary
-- `export_paper_examples.sh`: export canonical qualitative figures
-- `smoke_selector.sh`: fast local smoke test for the selector trainer
+- `train_single_view_main.sh`: train the current paper mainline
+- `eval_single_view_state.sh`: evaluate state-space metrics on a split
+- `eval_single_view_render.sh`: evaluate render-space metrics on a split
+- `export_single_view_repr.sh`: export explicit 3D scene representations
 
-## Figures
-
-Use `examples/figures/` for qualitative outputs that you may want to curate into the paper or project page.
+Older generator / selector / report scripts were moved to [`legacy/examples/`](/root/3d/generation/legacy/examples).

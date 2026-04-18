@@ -1,0 +1,61 @@
+model:
+  name: single_view_visible_direct_hidden_diffusion_v3_dinov2_frozen
+  arch: single_view_scene_v1
+  obs_channels: 4
+  image_size: 512
+  patch_size: 32
+  d_model: 768
+  encoder_layers: 12
+  decoder_layers: 8
+  num_heads: 12
+  dropout: 0.1
+  ffn_ratio: 4
+  k_vis: 12
+  k_hid: 8
+  z_dim: 256
+  pose_dim: 8
+  num_classes: 10
+  observation_backbone:
+    type: transformers_dinov2
+    model_name: facebook/dinov2-base
+    image_size: 518
+    freeze_backbone: true
+    allow_pseudo_rgb: false
+
+noise:
+  prediction_type: v_prediction
+  train_timesteps: 1000
+  beta_schedule: cosine
+  sampler: ddim
+  sampling_steps: 50
+
+training:
+  optimizer: adamw
+  lr: 1.5e-4
+  weight_decay: 0.05
+  batch_size: 16
+  grad_accum: 1
+  epochs: 80
+  warmup_steps: 5000
+  lr_schedule: cosine
+  mixed_precision: bf16
+  clip_grad_norm: 1.0
+
+loss:
+  lambda_layout: 1.0
+  lambda_visible_state: 2.5
+  lambda_visible_exist: 0.5
+  lambda_visible_cls: 0.5
+  lambda_hidden_state: 3.0
+  lambda_hidden_exist: 1.0
+  lambda_hidden_cls: 1.0
+  lambda_support: 0.5
+  lambda_wall: 0.25
+  lambda_floor: 0.25
+
+logging:
+  log_every_steps: 10
+  save_every_steps: 100
+
+runtime:
+  dry_run_dummy_batch: false

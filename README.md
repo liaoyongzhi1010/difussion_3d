@@ -1,58 +1,76 @@
 # Amodal Scene Diffusion
 
-A research codebase for single-view conditioned 3D scene posterior modeling with an explicit factorization:
+This repository is now organized around one paper mainline only:
 
-- visible region: deterministic / strongly constrained reconstruction
-- occluded region: posterior diffusion generation
-- posterior selection: a learned selector trained on top of a frozen generator
+- input: single real RGB view plus depth-derived observation channels
+- visible content: direct 3D reconstruction
+- hidden content: conditional diffusion completion
+- output: explicit scene-state codes that can be exported to 3D tri-plane representations
 
-This repository is intended to be the long-term project root for training, evaluation, qualitative examples, and future fixes. The public layout follows a cleaner release-style structure instead of a raw experiment workspace.
+Old `visible_locked / fullscene_control / selector` branches are no longer first-class entry points. They have been moved under [`legacy/`](/root/3d/generation/legacy) so the root repository reflects the actual paper path.
 
-## Highlights
+## Mainline Status
 
-- `src/` package layout for installable research code
-- explicit `configs/` for diffusion, selector, geometry, and pipeline runs
-- standalone `scripts/train/`, `scripts/eval/`, and `scripts/preprocess/` entrypoints
-- `examples/` shell scripts for common train/eval workflows
-- `docs/` notes for quickstart, dataset layout, reproducibility, and current paper results
+Current mainline data root:
+- `outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm`
+
+Current room-level split:
+- train: `1555`
+- val: `179`
+- test: `215`
+- room overlap across splits: `0`
+
+Current strongest working checkpoint family:
+- config: [`configs/diffusion/single_view_visible_direct_hidden_diffusion_v3_dinov2_frozen.yaml`](/root/3d/generation/configs/diffusion/single_view_visible_direct_hidden_diffusion_v3_dinov2_frozen.yaml)
+- backbone: official `facebook/dinov2-base`
+- method: `visible direct reconstruction + hidden diffusion`
 
 ## Repository Layout
 
 ```text
 .
-├── configs/                  # experiment configs
-│   ├── data/
-│   ├── diffusion/
+├── configs/
+│   ├── data/                # dataset roots and split metadata
+│   ├── diffusion/           # single-view paper configs
 │   ├── geometry_vae/
-│   ├── pipeline/
-│   ├── preprocess/
 │   └── runtime/
-├── docs/                     # public-facing documentation
-├── examples/                 # runnable example commands and figure placeholders
+├── docs/                    # quickstart, reproducibility, audit notes
+├── examples/                # canonical train / eval / export commands
+├── legacy/                  # archived older baselines and utilities
 ├── scripts/
 │   ├── preprocess/
 │   ├── train/
 │   ├── eval/
-│   ├── analysis/
 │   └── ops/
 ├── src/
 │   └── amodal_scene_diff/
 ├── Makefile
 ├── pyproject.toml
-├── requirements.txt
-└── README.md
+└── requirements.txt
 ```
 
-## What Is Included vs Excluded
+## What Is Paper-Grade Already
 
-This repo tracks code, configs, and reproducibility instructions.
+- canonical `paper_mainline_harness` now guards the route before train / eval / export
 
-It intentionally does **not** track large local artifacts such as:
+- `src/` package layout with installable code
+- room-level train/val/test split generation with disjoint rooms
+- real RGB restored into the packet pipeline
+- official DINOv2 observation backbone in the current best mainline
+- state-space evaluation for single-view reconstruction
+- render-space evaluation script for `PSNR / SSIM / LPIPS` on top-down semantic renders
+- explicit 3D export from predicted scene states to tri-plane scene representations
 
-- `outputs/`
-- `data/`
-- `.venv/`
-- internal notes and task scratch files
+## What Still Needs Upgrading
+
+These are the current weak points relative to top-conference-strength open codebases:
+
+- visible reconstruction head is still a custom transformer-set decoder, not yet a stronger DETR-style or geometry-native decoder stack
+- hidden diffusion branch is still an in-repo transformer denoiser, not yet a DiT-class latent diffusion backbone
+- geometry VAE is still a compact PointNet plus tri-plane decoder, not yet an LRM / InstantMesh-class geometry decoder
+- single-view training still needs a cleaner built-in validation hook instead of relying only on standalone eval scripts
+
+The detailed audit is recorded in [`docs/repo_audit.md`](/root/3d/generation/docs/repo_audit.md).
 
 ## Installation
 
@@ -63,97 +81,63 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-You can also use:
+## Canonical Commands
+
+Run the route harness before large experiments:
 
 ```bash
-make install
+make harness-single-view
 ```
 
-## Quick Start
+Train the mainline:
 
-See the following docs first:
+```bash
+make train-single-view
+```
+
+Evaluate state metrics on the test split:
+
+```bash
+make eval-single-view-state
+```
+
+Evaluate render metrics on the test split:
+
+```bash
+make eval-single-view-render
+```
+
+Run the unified stage board:
+
+```bash
+make pipeline-board
+```
+
+Export explicit 3D scene representations:
+
+```bash
+make export-single-view-repr
+```
+
+Restore packet RGB paths if packet metadata is incomplete:
+
+```bash
+make restore-rgb-paths
+```
+
+## Examples
+
+Canonical runnable examples live in:
+
+- [`examples/train_single_view_main.sh`](/root/3d/generation/examples/train_single_view_main.sh)
+- [`examples/eval_single_view_state.sh`](/root/3d/generation/examples/eval_single_view_state.sh)
+- [`examples/eval_single_view_render.sh`](/root/3d/generation/examples/eval_single_view_render.sh)
+- [`examples/export_single_view_repr.sh`](/root/3d/generation/examples/export_single_view_repr.sh)
+
+## Documentation
 
 - [`docs/quickstart.md`](/root/3d/generation/docs/quickstart.md)
 - [`docs/dataset_layout.md`](/root/3d/generation/docs/dataset_layout.md)
 - [`docs/reproducibility.md`](/root/3d/generation/docs/reproducibility.md)
-
-## Main Entry Points
-
-### Train the scene diffusion generator
-
-```bash
-make train-generator \
-  PACKET_DIR=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
-```
-
-### Train the posterior selector
-
-```bash
-make train-selector \
-  PACKET_DIR=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets \
-  SPLIT_JSON=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json \
-  GENERATOR_CKPT=outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0034000.pt
-```
-
-### Evaluate posterior samples and reranking
-
-```bash
-make eval-posterior \
-  PACKET_DIR=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets \
-  SPLIT_JSON=outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json \
-  GENERATOR_CKPT=outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0034000.pt
-```
-
-### Build paper tables and summary
-
-```bash
-make paper-report
-```
-
-### Export paper examples
-
-```bash
-make paper-examples
-```
-
-## Canonical Release Files
-
-- generator model: `src/amodal_scene_diff/models/diffusion/scene_denoising_transformer.py`
-- generator trainer: `scripts/train/train_scene_diffusion.py`
-- selector trainer: `scripts/train/train_posterior_selector.py`
-- posterior evaluation: `scripts/eval/eval_scene_posterior.py`
-- staged pipeline config: `configs/pipeline/visible_locked_compare.yaml`
-
-## Examples
-
-Runnable command examples live in:
-
-- [`examples/train_generator_full.sh`](/root/3d/generation/examples/train_generator_full.sh)
-- [`examples/train_selector_full.sh`](/root/3d/generation/examples/train_selector_full.sh)
-- [`examples/eval_posterior_full.sh`](/root/3d/generation/examples/eval_posterior_full.sh)
-- [`examples/build_paper_report.sh`](/root/3d/generation/examples/build_paper_report.sh)
-- [`examples/export_paper_examples.sh`](/root/3d/generation/examples/export_paper_examples.sh)
-- [`examples/smoke_selector.sh`](/root/3d/generation/examples/smoke_selector.sh)
-
-Qualitative figure placeholders live under:
-
-- [`examples/figures/README.md`](/root/3d/generation/examples/figures/README.md)
-- [`docs/figures/README.md`](/root/3d/generation/docs/figures/README.md)
-
-## Repository Policy
-
-The GitHub repository is the single mainline project for all future work.
-
-- training, evaluation, visualization, and example export should all be driven from this repository
-- bug fixes and method iterations should be implemented here, validated here, and pushed back here
-- representative example figures and lightweight result summaries may be committed when useful
-
-See [`CONTRIBUTING.md`](/root/3d/generation/CONTRIBUTING.md) for the explicit project policy.
-
-## Reproducibility Conventions
-
-- `src/` layout for clean imports
-- configs separated from code
-- public examples are command-first, not notebook-first
-- large local artifacts are ignored from git
-- repository can be patched and re-pushed as experiments evolve
+- [`docs/formal_paper_mainline.md`](/root/3d/generation/docs/formal_paper_mainline.md)
+- [`docs/repo_audit.md`](/root/3d/generation/docs/repo_audit.md)

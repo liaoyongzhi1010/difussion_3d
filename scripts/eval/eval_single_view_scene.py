@@ -10,8 +10,8 @@ import torch
 
 
 def _load_train_utils() -> Any:
-    train_script = Path(__file__).resolve().parents[1] / "train" / "train_scene_diffusion.py"
-    spec = importlib.util.spec_from_file_location("scene_train_utils", train_script)
+    train_script = Path(__file__).resolve().parents[1] / "train" / "train_single_view_scene.py"
+    spec = importlib.util.spec_from_file_location("single_view_train_utils", train_script)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"failed to load training utilities from {train_script}")
     module = importlib.util.module_from_spec(spec)
@@ -23,19 +23,19 @@ TRAIN_UTILS = _load_train_utils()
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Posterior sampling/eval for scene_denoiser_v1 checkpoints.")
+    parser = argparse.ArgumentParser(description="Posterior sampling/eval for single_view_scene_v1 checkpoints.")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--packet-dir", required=True)
-    parser.add_argument("--config", default="configs/diffusion/base.yaml")
-    parser.add_argument("--data-config", default="configs/data/3dfront_v1.yaml")
+    parser.add_argument("--config", default="configs/diffusion/single_view_visible_direct_hidden_diffusion_v3_dinov2_frozen.yaml")
+    parser.add_argument("--data-config", default="configs/data/pixarmesh_single_view_main.yaml")
     parser.add_argument("--runtime-config", default="configs/runtime/gpu_smoke.yaml")
     parser.add_argument("--batch-size", type=int, default=16)
-    parser.add_argument("--max-samples", type=int, default=64)
-    parser.add_argument("--num-posterior-samples", type=int, default=4)
-    parser.add_argument("--num-inference-steps", type=int, default=50)
+    parser.add_argument("--max-samples", type=int, default=0)
+    parser.add_argument("--num-posterior-samples", type=int, default=5)
+    parser.add_argument("--num-inference-steps", type=int, default=20)
     parser.add_argument("--sample-id-json", default="")
     parser.add_argument("--split", default="")
-    parser.add_argument("--save-summary", default="outputs/debug/posterior_eval_summary.json")
+    parser.add_argument("--save-summary", default="outputs/debug/single_view_eval_summary.json")
     return parser.parse_args()
 
 
@@ -110,6 +110,8 @@ def _selector_metric_totals() -> dict[str, float]:
         "layout_mse": 0.0,
         "visible_mse": 0.0,
         "hidden_mse": 0.0,
+        "visible_exist_acc": 0.0,
+        "visible_cls_acc": 0.0,
         "hidden_exist_acc": 0.0,
         "hidden_cls_acc": 0.0,
         "hidden_exist_brier": 0.0,
@@ -141,6 +143,13 @@ def _filter_packet_paths(packet_paths: list[Path], sample_ids: list[str], max_sa
     return selected[:max_samples] if max_samples is not None else selected
 
 
+def _class_accuracy_per_scene(logits: torch.Tensor, labels: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    pred = logits.argmax(dim=-1)
+    correct = ((pred == labels).float() * mask.float()).sum(dim=-1)
+    denom = mask.float().sum(dim=-1).clamp_min(1.0)
+    return correct / denom
+
+
 def main() -> None:
     args = parse_args()
     diffusion_cfg = TRAIN_UTILS.load_yaml(args.config)
@@ -166,26 +175,23 @@ def main() -> None:
     max_samples = args.max_samples if args.max_samples and args.max_samples > 0 else None
     packet_paths = _filter_packet_paths(all_packet_paths, requested_sample_ids, max_samples)
     if not packet_paths:
-        raise RuntimeError("posterior eval found zero packet files after filtering")
+        raise RuntimeError("single-view eval found zero packet files after filtering")
 
-    strip_spatial_conditioning = bool(not cfg["model"].get("uses_spatial_conditioning", False))
-    preload_packets = True
-    dataset, loader = TRAIN_UTILS.make_dataloader_from_packets(
-        packet_paths=packet_paths,
+    dataset, loader = TRAIN_UTILS.make_dataloader(
+        packet_paths,
         batch_size=args.batch_size,
+        image_size=int(cfg["data"].get("image_size", 512)),
+        preload_packets=True,
         num_workers=0,
         pin_memory=False,
         shuffle=False,
         drop_last=False,
-        preload_packets=preload_packets,
-        strip_spatial_conditioning=strip_spatial_conditioning,
-        spatial_placeholder_size=int(cfg["runtime"].get("spatial_placeholder_size", 1)),
         persistent_workers=False,
         prefetch_factor=2,
     )
 
     model = TRAIN_UTILS.build_model(cfg).to(device)
-    model.load_state_dict(checkpoint["model_state"])
+    TRAIN_UTILS.load_model_state_compat(model, checkpoint["model_state"])
     model.eval()
 
     aggregate = {
@@ -195,8 +201,10 @@ def main() -> None:
         "best_layout_mse": 0.0,
         "best_visible_mse": 0.0,
         "best_hidden_mse": 0.0,
-        "hidden_diversity": 0.0,
         "visible_diversity": 0.0,
+        "hidden_diversity": 0.0,
+        "visible_exist_acc": 0.0,
+        "visible_cls_acc": 0.0,
         "hidden_exist_acc": 0.0,
         "hidden_cls_acc": 0.0,
         "hidden_exist_brier": 0.0,
@@ -215,13 +223,15 @@ def main() -> None:
             batch = batch.to(device)
             gt_states = model.continuous_state_targets(batch)
             visible_mask = batch.target.visible_loss_mask.float().unsqueeze(-1)
-            visible_presence = batch.cond.visible_valid_mask.float()
+            visible_mask_2d = batch.target.visible_loss_mask.float()
             hidden_mask = batch.target.hidden_gt_mask.float().unsqueeze(-1)
             hidden_mask_2d = batch.target.hidden_gt_mask.float()
 
             layout_errors: list[torch.Tensor] = []
             visible_errors: list[torch.Tensor] = []
             hidden_errors: list[torch.Tensor] = []
+            visible_exist_accs: list[torch.Tensor] = []
+            visible_cls_accs: list[torch.Tensor] = []
             hidden_exist_accs: list[torch.Tensor] = []
             hidden_cls_accs: list[torch.Tensor] = []
             hidden_exist_briers: list[torch.Tensor] = []
@@ -238,21 +248,21 @@ def main() -> None:
                 visible_errors.append(_masked_mse_per_scene(sample["visible"], gt_states["visible"], visible_mask))
                 hidden_errors.append(_masked_mse_per_scene(sample["hidden"], gt_states["hidden"], hidden_mask))
 
-                exist_probs = sample["hidden_exist_probs"]
-                hidden_exist_probs.append(exist_probs)
-                hidden_exist_accs.append(((exist_probs > 0.5).float() == hidden_mask_2d).float().mean(dim=-1))
-                hidden_exist_briers.append(((exist_probs - hidden_mask_2d) ** 2).mean(dim=-1))
+                visible_exist_probs = sample["visible_exist_probs"]
+                hidden_exist_prob = sample["hidden_exist_probs"]
+                hidden_exist_probs.append(hidden_exist_prob)
 
-                pred_cls = sample["hidden_cls_logits"].argmax(dim=-1)
-                cls_correct = ((pred_cls == batch.target.hidden_cls_gt).float() * hidden_mask_2d).sum(dim=-1)
-                cls_denom = hidden_mask_2d.sum(dim=-1).clamp_min(1.0)
-                hidden_cls_accs.append(cls_correct / cls_denom)
+                visible_exist_accs.append(((visible_exist_probs > 0.5).float() == visible_mask_2d).float().mean(dim=-1))
+                hidden_exist_accs.append(((hidden_exist_prob > 0.5).float() == hidden_mask_2d).float().mean(dim=-1))
+                hidden_exist_briers.append(((hidden_exist_prob - hidden_mask_2d) ** 2).mean(dim=-1))
+                visible_cls_accs.append(_class_accuracy_per_scene(sample["visible_cls_logits"], batch.target.visible_cls_gt, batch.target.visible_loss_mask))
+                hidden_cls_accs.append(_class_accuracy_per_scene(sample["hidden_cls_logits"], batch.target.hidden_cls_gt, batch.target.hidden_gt_mask))
 
                 visible_samples.append(sample["visible"])
                 hidden_samples.append(sample["hidden"])
-                exist_confidence_scores.append(_binary_confidence_per_scene(exist_probs))
-                semantic_confidence_scores.append(_class_confidence_per_scene(sample["hidden_cls_probs"], exist_probs))
-                object_presence = torch.cat([visible_presence, exist_probs], dim=-1)
+                exist_confidence_scores.append(_binary_confidence_per_scene(hidden_exist_prob))
+                semantic_confidence_scores.append(_class_confidence_per_scene(sample["hidden_cls_probs"], hidden_exist_prob))
+                object_presence = torch.cat([visible_mask_2d, hidden_exist_prob], dim=-1)
                 relation_confidence_scores.append(
                     _relation_confidence_per_scene(
                         sample["support_logits"],
@@ -266,6 +276,8 @@ def main() -> None:
             visible_stack = torch.stack(visible_errors, dim=0)
             hidden_stack = torch.stack(hidden_errors, dim=0)
             hidden_exist_stack = torch.stack(hidden_exist_probs, dim=0)
+            visible_exist_acc_stack = torch.stack(visible_exist_accs, dim=0)
+            visible_cls_acc_stack = torch.stack(visible_cls_accs, dim=0)
             hidden_exist_acc_stack = torch.stack(hidden_exist_accs, dim=0)
             hidden_cls_acc_stack = torch.stack(hidden_cls_accs, dim=0)
             hidden_exist_brier_stack = torch.stack(hidden_exist_briers, dim=0)
@@ -280,10 +292,12 @@ def main() -> None:
             mean_layout = layout_stack.mean(dim=0)
             mean_visible = visible_stack.mean(dim=0)
             mean_hidden = hidden_stack.mean(dim=0)
-            mean_exist_acc = hidden_exist_acc_stack.mean(dim=0)
-            mean_cls_acc = hidden_cls_acc_stack.mean(dim=0)
-            mean_exist_prob = hidden_exist_stack.mean(dim=0)
-            exist_brier = ((mean_exist_prob - hidden_mask_2d) ** 2).mean(dim=-1)
+            mean_visible_exist_acc = visible_exist_acc_stack.mean(dim=0)
+            mean_visible_cls_acc = visible_cls_acc_stack.mean(dim=0)
+            mean_hidden_exist_acc = hidden_exist_acc_stack.mean(dim=0)
+            mean_hidden_cls_acc = hidden_cls_acc_stack.mean(dim=0)
+            mean_hidden_exist_prob = hidden_exist_stack.mean(dim=0)
+            exist_brier = ((mean_hidden_exist_prob - hidden_mask_2d) ** 2).mean(dim=-1)
             hidden_diversity = _pairwise_diversity_per_scene(hidden_samples, hidden_mask)
             visible_diversity = _pairwise_diversity_per_scene(visible_samples, visible_mask)
             consensus_weight = hidden_exist_stack.mean(dim=0, keepdim=True).unsqueeze(-1)
@@ -311,10 +325,12 @@ def main() -> None:
             aggregate["best_layout_mse"] += float(best_layout.sum().item())
             aggregate["best_visible_mse"] += float(best_visible.sum().item())
             aggregate["best_hidden_mse"] += float(best_hidden.sum().item())
-            aggregate["hidden_diversity"] += float(hidden_diversity.sum().item())
             aggregate["visible_diversity"] += float(visible_diversity.sum().item())
-            aggregate["hidden_exist_acc"] += float(mean_exist_acc.sum().item())
-            aggregate["hidden_cls_acc"] += float(mean_cls_acc.sum().item())
+            aggregate["hidden_diversity"] += float(hidden_diversity.sum().item())
+            aggregate["visible_exist_acc"] += float(mean_visible_exist_acc.sum().item())
+            aggregate["visible_cls_acc"] += float(mean_visible_cls_acc.sum().item())
+            aggregate["hidden_exist_acc"] += float(mean_hidden_exist_acc.sum().item())
+            aggregate["hidden_cls_acc"] += float(mean_hidden_cls_acc.sum().item())
             aggregate["hidden_exist_brier"] += float(exist_brier.sum().item())
 
             oracle_gap = (mean_hidden - best_hidden).clamp_min(1.0e-6)
@@ -323,22 +339,26 @@ def main() -> None:
                 selected_layout = _gather_selected_per_scene(layout_stack, selected_indices)
                 selected_visible = _gather_selected_per_scene(visible_stack, selected_indices)
                 selected_hidden = _gather_selected_per_scene(hidden_stack, selected_indices)
-                selected_exist_acc = _gather_selected_per_scene(hidden_exist_acc_stack, selected_indices)
-                selected_cls_acc = _gather_selected_per_scene(hidden_cls_acc_stack, selected_indices)
-                selected_exist_brier = _gather_selected_per_scene(hidden_exist_brier_stack, selected_indices)
+                selected_visible_exist_acc = _gather_selected_per_scene(visible_exist_acc_stack, selected_indices)
+                selected_visible_cls_acc = _gather_selected_per_scene(visible_cls_acc_stack, selected_indices)
+                selected_hidden_exist_acc = _gather_selected_per_scene(hidden_exist_acc_stack, selected_indices)
+                selected_hidden_cls_acc = _gather_selected_per_scene(hidden_cls_acc_stack, selected_indices)
+                selected_hidden_exist_brier = _gather_selected_per_scene(hidden_exist_brier_stack, selected_indices)
                 gap_closed = ((mean_hidden - selected_hidden) / oracle_gap).clamp(0.0, 1.0)
 
                 selector_aggregate[selector_name]["layout_mse"] += float(selected_layout.sum().item())
                 selector_aggregate[selector_name]["visible_mse"] += float(selected_visible.sum().item())
                 selector_aggregate[selector_name]["hidden_mse"] += float(selected_hidden.sum().item())
-                selector_aggregate[selector_name]["hidden_exist_acc"] += float(selected_exist_acc.sum().item())
-                selector_aggregate[selector_name]["hidden_cls_acc"] += float(selected_cls_acc.sum().item())
-                selector_aggregate[selector_name]["hidden_exist_brier"] += float(selected_exist_brier.sum().item())
+                selector_aggregate[selector_name]["visible_exist_acc"] += float(selected_visible_exist_acc.sum().item())
+                selector_aggregate[selector_name]["visible_cls_acc"] += float(selected_visible_cls_acc.sum().item())
+                selector_aggregate[selector_name]["hidden_exist_acc"] += float(selected_hidden_exist_acc.sum().item())
+                selector_aggregate[selector_name]["hidden_cls_acc"] += float(selected_hidden_cls_acc.sum().item())
+                selector_aggregate[selector_name]["hidden_exist_brier"] += float(selected_hidden_exist_brier.sum().item())
                 selector_aggregate[selector_name]["oracle_hidden_gap_closed"] += float(gap_closed.sum().item())
             total_scenes += int(batch.batch_size)
 
     if total_scenes == 0:
-        raise RuntimeError("posterior eval found zero scenes")
+        raise RuntimeError("single-view eval found zero scenes")
 
     summary = {
         "checkpoint": str(Path(args.checkpoint)),
@@ -353,7 +373,7 @@ def main() -> None:
         "dataset_info": {
             "packet_total_mb": round(dataset.total_bytes / 1024 / 1024, 3),
             "preload_packets": dataset.preload_packets,
-            "strip_spatial_conditioning": dataset.strip_spatial_conditioning,
+            "image_size": dataset.image_size,
         },
         "metrics": {key: value / total_scenes for key, value in aggregate.items()},
         "selector_metrics": {
