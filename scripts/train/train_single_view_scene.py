@@ -14,7 +14,7 @@ import yaml
 from torch.utils.data import DataLoader
 
 from amodal_scene_diff.datasets import SingleViewPacketDataset, collate_single_view_packets
-from amodal_scene_diff.models.diffusion import SingleViewReconstructionDiffusion
+from amodal_scene_diff.diffusion import SingleViewSceneDiffusion
 from amodal_scene_diff.structures import (
     C_OBJ,
     D_POSE,
@@ -244,7 +244,7 @@ def _class_accuracy_per_scene(logits: torch.Tensor, labels: torch.Tensor, mask: 
 
 @torch.no_grad()
 def evaluate_single_view_state(
-    model: SingleViewReconstructionDiffusion,
+    model: SingleViewSceneDiffusion,
     loader: DataLoader,
     device: str,
     num_inference_steps: int,
@@ -290,8 +290,8 @@ def evaluate_single_view_state(
     return {key: value / max(total_scenes, 1) for key, value in aggregate.items()}
 
 
-def build_model(cfg: dict[str, Any]) -> SingleViewReconstructionDiffusion:
-    return SingleViewReconstructionDiffusion.from_config(cfg)
+def build_model(cfg: dict[str, Any]) -> SingleViewSceneDiffusion:
+    return SingleViewSceneDiffusion.from_config(cfg)
 
 
 def discover_packet_paths(packet_dir: str | Path, max_samples: int | None) -> list[Path]:

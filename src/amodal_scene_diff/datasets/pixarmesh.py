@@ -16,7 +16,7 @@ from .collate import collate_scene_packets
 Tensor = torch.Tensor
 
 
-class SingleViewPacketDataset(Dataset[dict[str, Any]]):
+class PixarMeshPacketDataset(Dataset[dict[str, Any]]):
     """Load single-view observations directly from packets.
 
     Preferred source order:
@@ -146,7 +146,7 @@ def build_observation_image(packet: dict[str, Any], image_size: int) -> tuple[Te
     return obs_image, False
 
 
-def collate_single_view_packets(samples: list[dict[str, Any]]) -> SingleViewSceneBatch:
+def collate_pixarmesh_packets(samples: list[dict[str, Any]]) -> SingleViewSceneBatch:
     base = collate_scene_packets(samples)
     obs_image = torch.stack([
         _as_tensor(sample["condition"]["obs_image"], dtype=torch.float32) for sample in samples

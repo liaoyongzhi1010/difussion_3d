@@ -10,8 +10,8 @@ import torch
 import yaml
 
 from amodal_scene_diff.datasets import SingleViewPacketDataset, collate_single_view_packets
-from amodal_scene_diff.models.diffusion import SingleViewReconstructionDiffusion
-from amodal_scene_diff.models.geometry import GeometryVAE
+from amodal_scene_diff.diffusion import SingleViewSceneDiffusion
+from amodal_scene_diff.geometry import GeometryVAE
 from torch.utils.data import DataLoader
 
 
@@ -71,8 +71,8 @@ def discover_packet_paths(packet_dir: str | Path, max_samples: int) -> list[Path
     return packet_paths
 
 
-def build_model(cfg: dict[str, Any]) -> SingleViewReconstructionDiffusion:
-    return SingleViewReconstructionDiffusion.from_config(cfg)
+def build_model(cfg: dict[str, Any]) -> SingleViewSceneDiffusion:
+    return SingleViewSceneDiffusion.from_config(cfg)
 
 
 def build_geometry_decoder(geometry_cfg: dict[str, Any], checkpoint_path: str | Path, device: str) -> GeometryVAE:

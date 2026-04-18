@@ -9,7 +9,7 @@ import torch
 import yaml
 from torch.utils.data import DataLoader, Dataset
 
-from amodal_scene_diff.models.geometry import GeometryVAE
+from amodal_scene_diff.geometry import GeometryVAE
 
 
 class GeometryExportDataset(Dataset[dict[str, Any]]):

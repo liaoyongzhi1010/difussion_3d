@@ -7,47 +7,24 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from amodal_scene_diff.models.diffusion.observation_backbones import build_single_view_observation_encoder
-from amodal_scene_diff.structures import C_OBJ, D_MODEL, D_POSE, K_HID, K_VIS, N_OBJ_MAX, Z_DIM, SingleViewSceneBatch
+from amodal_scene_diff.backbones import build_observation_backbone
+from amodal_scene_diff.structures import (
+    C_OBJ,
+    D_MODEL,
+    D_POSE,
+    K_HID,
+    K_VIS,
+    Z_DIM,
+    SingleViewSceneBatch,
+)
+
+from .sampler import sample_ddim_posterior
+from .scheduler import NoiseScheduler
 
 _CONTINUOUS_DIM = D_POSE + Z_DIM
 
 
-def _make_beta_schedule(train_timesteps: int, schedule: str) -> torch.Tensor:
-    if train_timesteps <= 0:
-        raise ValueError("train_timesteps must be positive")
-    schedule_name = schedule.lower()
-    if schedule_name == "linear":
-        return torch.linspace(1.0e-4, 2.0e-2, train_timesteps, dtype=torch.float32)
-    if schedule_name != "cosine":
-        raise ValueError(f"unsupported beta schedule: {schedule}")
-
-    steps = train_timesteps + 1
-    x = torch.linspace(0, train_timesteps, steps, dtype=torch.float32)
-    alphas_cumprod = torch.cos(((x / train_timesteps) + 0.008) / 1.008 * math.pi / 2) ** 2
-    alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
-    betas = 1.0 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
-    return betas.clamp(1.0e-5, 0.999)
-
-
-def _extract(buffer: torch.Tensor, timesteps: torch.Tensor, target_shape: tuple[int, ...]) -> torch.Tensor:
-    values = buffer.gather(0, timesteps)
-    while values.ndim < len(target_shape):
-        values = values.unsqueeze(-1)
-    return values
-
-
-def _sampling_schedule(train_timesteps: int, sampling_steps: int, device: torch.device) -> torch.Tensor:
-    steps = max(1, min(int(sampling_steps), int(train_timesteps)))
-    schedule = torch.linspace(train_timesteps - 1, 0, steps, device=device)
-    schedule = schedule.round().long()
-    schedule = torch.unique_consecutive(schedule)
-    if int(schedule[-1].item()) != 0:
-        schedule = torch.cat([schedule, torch.zeros(1, device=device, dtype=torch.long)], dim=0)
-    return schedule
-
-
-class SinusoidalTimeEmbedding(nn.Module):
+class _SinusoidalTimeEmbedding(nn.Module):
     def __init__(self, dim: int) -> None:
         super().__init__()
         self.dim = dim
@@ -63,153 +40,19 @@ class SinusoidalTimeEmbedding(nn.Module):
         return embedding
 
 
-class PatchObservationEncoder(nn.Module):
-    """ViT-style patch encoder used as the in-repo fallback backbone."""
+class SingleViewSceneDiffusion(nn.Module):
+    """Paper mainline: direct visible reconstruction + conditional hidden diffusion.
 
-    def __init__(
-        self,
-        *,
-        obs_channels: int,
-        image_size: int,
-        patch_size: int,
-        d_model: int,
-        num_layers: int,
-        num_heads: int,
-        ffn_ratio: float,
-        dropout: float,
-    ) -> None:
-        super().__init__()
-        if image_size % patch_size != 0:
-            raise ValueError(f"image_size={image_size} must be divisible by patch_size={patch_size}")
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.grid_size = image_size // patch_size
-        num_tokens = self.grid_size * self.grid_size
-        self.patch_embed = nn.Conv2d(obs_channels, d_model, kernel_size=patch_size, stride=patch_size)
-        self.cls_token = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
-        self.pos_embed = nn.Parameter(torch.randn(1, num_tokens + 1, d_model) * 0.02)
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=num_heads,
-            dim_feedforward=int(d_model * ffn_ratio),
-            dropout=dropout,
-            activation="gelu",
-            batch_first=True,
-            norm_first=True,
-        )
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-        self.norm = nn.LayerNorm(d_model)
+    The module is the composition of:
+    - an observation backbone (patch ViT / DINOv2 / DINOv2-hybrid),
+    - a deterministic transformer-decoder head over visible slots,
+    - a conditional transformer-decoder denoiser over hidden slots,
+    - a relation head for floor/wall/support predictions,
+    - a noise scheduler + DDIM sampler.
 
-    def forward(self, batch: SingleViewSceneBatch) -> dict[str, torch.Tensor]:
-        obs_image = batch.cond.obs_image
-        tokens = self.patch_embed(obs_image).flatten(2).transpose(1, 2)
-        cls = self.cls_token.expand(obs_image.shape[0], -1, -1)
-        tokens = torch.cat([cls, tokens], dim=1)
-        tokens = tokens + self.pos_embed[:, : tokens.shape[1]]
-        tokens = self.transformer(tokens)
-        tokens = self.norm(tokens)
-        return {
-            "global_token": tokens[:, 0],
-            "patch_tokens": tokens[:, 1:],
-        }
-
-
-class TransformersDinov2ObservationEncoder(nn.Module):
-    """Official DINOv2 backbone adapter via Hugging Face Transformers."""
-
-    def __init__(
-        self,
-        *,
-        d_model: int,
-        model_name: str,
-        image_size: int,
-        freeze_backbone: bool,
-        allow_pseudo_rgb: bool,
-    ) -> None:
-        super().__init__()
-        from transformers import Dinov2Model
-
-        self.image_size = int(image_size)
-        self.allow_pseudo_rgb = bool(allow_pseudo_rgb)
-        self.backbone = Dinov2Model.from_pretrained(model_name)
-        hidden_size = int(self.backbone.config.hidden_size)
-        self.proj = nn.Identity() if hidden_size == int(d_model) else nn.Linear(hidden_size, int(d_model))
-        self.norm = nn.LayerNorm(int(d_model))
-
-        if freeze_backbone:
-            for param in self.backbone.parameters():
-                param.requires_grad = False
-
-    def _select_rgb_inputs(self, batch: SingleViewSceneBatch) -> torch.Tensor:
-        if not self.allow_pseudo_rgb and not bool(batch.cond.rgb_available.all().item()):
-            raise RuntimeError(
-                "transformers_dinov2 backbone requires real RGB observations. "
-                "Current batch marks rgb_available=false; wire RGB into the dataset first or set allow_pseudo_rgb=true."
-            )
-        if int(batch.cond.obs_image.shape[1]) < 3:
-            raise ValueError(f"expected at least 3 observation channels, got {tuple(batch.cond.obs_image.shape)}")
-        rgb = batch.cond.obs_image[:, :3]
-        if rgb.shape[-2:] != (self.image_size, self.image_size):
-            rgb = F.interpolate(rgb, size=(self.image_size, self.image_size), mode="bilinear", align_corners=False)
-        return rgb
-
-    def forward(self, batch: SingleViewSceneBatch) -> dict[str, torch.Tensor]:
-        rgb = self._select_rgb_inputs(batch)
-        outputs = self.backbone(pixel_values=rgb)
-        tokens = self.norm(self.proj(outputs.last_hidden_state))
-        return {
-            "global_token": tokens[:, 0],
-            "patch_tokens": tokens[:, 1:],
-        }
-
-
-def build_observation_encoder(
-    *,
-    obs_channels: int,
-    image_size: int,
-    patch_size: int,
-    d_model: int,
-    encoder_layers: int,
-    num_heads: int,
-    ffn_ratio: float,
-    dropout: float,
-    backbone_cfg: dict[str, Any] | None = None,
-) -> nn.Module:
-    cfg = dict(backbone_cfg or {})
-    backbone_type = str(cfg.get("type", "patch_vit")).lower()
-
-    if backbone_type == "patch_vit":
-        return PatchObservationEncoder(
-            obs_channels=obs_channels,
-            image_size=image_size,
-            patch_size=patch_size,
-            d_model=d_model,
-            num_layers=encoder_layers,
-            num_heads=num_heads,
-            ffn_ratio=ffn_ratio,
-            dropout=dropout,
-        )
-
-    if backbone_type == "transformers_dinov2":
-        return TransformersDinov2ObservationEncoder(
-            d_model=d_model,
-            model_name=str(cfg.get("model_name", "facebook/dinov2-base")),
-            image_size=int(cfg.get("image_size", 518)),
-            freeze_backbone=bool(cfg.get("freeze_backbone", False)),
-            allow_pseudo_rgb=bool(cfg.get("allow_pseudo_rgb", False)),
-        )
-
-    raise ValueError(f"unsupported observation backbone type: {backbone_type}")
-
-
-class SingleViewReconstructionDiffusion(nn.Module):
-    """Paper mainline: visible slots are reconstructed directly, hidden slots are sampled by diffusion.
-
-    The module split follows the design pattern common in recent single-image 3D systems:
-    - image token encoder over the observed view
-    - deterministic visible 3D reconstruction head
-    - conditional latent diffusion head only for occluded content
-    - explicit scene-state output that can be decoded to tri-planes / meshes downstream
+    The head architectures here mirror the v3/v4 checkpoint layout so existing
+    weights are load-compatible. Newer v5-class heads (DiT, DETR) live under
+    `amodal_scene_diff.heads` and are swapped in via config.
     """
 
     def __init__(
@@ -241,10 +84,12 @@ class SingleViewReconstructionDiffusion(nn.Module):
     ) -> None:
         super().__init__()
         self.d_model = d_model
-        self.train_timesteps = int(train_timesteps)
-        self.prediction_type = str(prediction_type).lower()
-        if self.prediction_type not in {"epsilon", "eps", "v", "v_prediction"}:
-            raise ValueError(f"unsupported prediction_type: {prediction_type}")
+        self.scheduler = NoiseScheduler(
+            train_timesteps=train_timesteps,
+            schedule=beta_schedule,
+            prediction_type=prediction_type,
+        )
+        self.scheduler.register_buffers(self)
 
         self.layout_weight = float(layout_weight)
         self.visible_weight = float(visible_weight)
@@ -257,15 +102,7 @@ class SingleViewReconstructionDiffusion(nn.Module):
         self.floor_weight = float(floor_weight)
         self.wall_weight = float(wall_weight)
 
-        betas = _make_beta_schedule(self.train_timesteps, beta_schedule)
-        alphas = 1.0 - betas
-        alphas_cumprod = torch.cumprod(alphas, dim=0)
-        self.register_buffer("betas", betas, persistent=False)
-        self.register_buffer("alphas_cumprod", alphas_cumprod, persistent=False)
-        self.register_buffer("sqrt_alphas_cumprod", torch.sqrt(alphas_cumprod), persistent=False)
-        self.register_buffer("sqrt_one_minus_alphas_cumprod", torch.sqrt(1.0 - alphas_cumprod), persistent=False)
-
-        self.observation_encoder = build_single_view_observation_encoder(
+        self.observation_encoder = build_observation_backbone(
             obs_channels=obs_channels,
             image_size=image_size,
             patch_size=patch_size,
@@ -277,7 +114,7 @@ class SingleViewReconstructionDiffusion(nn.Module):
             backbone_cfg=observation_backbone_cfg,
         )
         self.source_embedding = nn.Embedding(3, d_model)
-        self.time_embedding = SinusoidalTimeEmbedding(d_model)
+        self.time_embedding = _SinusoidalTimeEmbedding(d_model)
         self.time_mlp = nn.Sequential(
             nn.Linear(d_model, d_model * 4),
             nn.SiLU(),
@@ -350,7 +187,7 @@ class SingleViewReconstructionDiffusion(nn.Module):
         return sum(param.numel() for param in self.parameters())
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> "SingleViewReconstructionDiffusion":
+    def from_config(cls, cfg: dict[str, Any]) -> "SingleViewSceneDiffusion":
         model_cfg = cfg["model"]
         noise_cfg = cfg.get("noise", {})
         loss_cfg = cfg.get("loss", {})
@@ -380,36 +217,6 @@ class SingleViewReconstructionDiffusion(nn.Module):
             wall_weight=float(loss_cfg.get("lambda_wall", 0.25)),
         )
 
-    def q_sample(self, x0: torch.Tensor, noise: torch.Tensor, timesteps: torch.Tensor) -> torch.Tensor:
-        alpha = _extract(self.sqrt_alphas_cumprod, timesteps, tuple(x0.shape))
-        sigma = _extract(self.sqrt_one_minus_alphas_cumprod, timesteps, tuple(x0.shape))
-        return alpha * x0 + sigma * noise
-
-    def prediction_target(self, x0: torch.Tensor, noise: torch.Tensor, timesteps: torch.Tensor) -> torch.Tensor:
-        if self.prediction_type in {"epsilon", "eps"}:
-            return noise
-        alpha = _extract(self.sqrt_alphas_cumprod, timesteps, tuple(x0.shape))
-        sigma = _extract(self.sqrt_one_minus_alphas_cumprod, timesteps, tuple(x0.shape))
-        return alpha * noise - sigma * x0
-
-    def _prediction_to_x0_and_eps(
-        self,
-        prediction: torch.Tensor,
-        xt: torch.Tensor,
-        timesteps: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        alpha = _extract(self.sqrt_alphas_cumprod, timesteps, tuple(xt.shape))
-        sigma = _extract(self.sqrt_one_minus_alphas_cumprod, timesteps, tuple(xt.shape))
-        if self.prediction_type in {"epsilon", "eps"}:
-            eps = prediction
-            x0 = (xt - sigma * eps) / alpha.clamp_min(1.0e-6)
-            return x0, eps
-
-        v = prediction
-        x0 = alpha * xt - sigma * v
-        eps = sigma * xt + alpha * v
-        return x0, eps
-
     def continuous_state_targets(self, batch: SingleViewSceneBatch) -> dict[str, torch.Tensor]:
         target = batch.target
         return {
@@ -423,10 +230,7 @@ class SingleViewReconstructionDiffusion(nn.Module):
         source_bias = self.source_embedding(batch.cond.source_id.long())
         global_token = self.global_norm(encoded["global_token"] + source_bias)
         patch_tokens = encoded["patch_tokens"] + source_bias.unsqueeze(1)
-        return {
-            "global_token": global_token,
-            "patch_tokens": patch_tokens,
-        }
+        return {"global_token": global_token, "patch_tokens": patch_tokens}
 
     def decode_visible(
         self,
@@ -443,7 +247,11 @@ class SingleViewReconstructionDiffusion(nn.Module):
         visible_exist_logits = self.visible_exist_head(visible_ctx).squeeze(-1)
         visible_cls_logits = self.visible_cls_head(visible_ctx)
         visible_presence = torch.sigmoid(visible_exist_logits).unsqueeze(-1)
-        visible_anchor_tokens = visible_ctx + self.visible_state_in(visible_state) + self.visible_presence_proj(visible_presence)
+        visible_anchor_tokens = (
+            visible_ctx
+            + self.visible_state_in(visible_state)
+            + self.visible_presence_proj(visible_presence)
+        )
         return {
             "layout_pred": layout_pred,
             "visible_ctx": visible_ctx,
@@ -510,16 +318,27 @@ class SingleViewReconstructionDiffusion(nn.Module):
 
         visible_mask = target.visible_loss_mask.float().unsqueeze(-1)
         visible_mask_2d = target.visible_loss_mask.float()
-        visible_state_loss = ((visible_ctx["visible_state"] - states["visible"]) ** 2 * visible_mask).sum() / visible_mask.sum().clamp_min(1.0)
+        visible_state_loss = (
+            ((visible_ctx["visible_state"] - states["visible"]) ** 2 * visible_mask).sum()
+            / visible_mask.sum().clamp_min(1.0)
+        )
         visible_exist_loss = F.binary_cross_entropy_with_logits(visible_ctx["visible_exist_logits"], visible_mask_2d)
-        visible_cls_loss = self._class_loss(visible_ctx["visible_cls_logits"], target.visible_cls_gt, target.visible_loss_mask)
+        visible_cls_loss = self._class_loss(
+            visible_ctx["visible_cls_logits"], target.visible_cls_gt, target.visible_loss_mask
+        )
 
         hidden_x0 = states["hidden"]
         hidden_mask = target.hidden_gt_mask.float().unsqueeze(-1)
         hidden_mask_2d = target.hidden_gt_mask.float()
-        timesteps = torch.randint(0, self.train_timesteps, (batch_size,), device=device, dtype=torch.long)
+        timesteps = torch.randint(0, self.scheduler.train_timesteps, (batch_size,), device=device, dtype=torch.long)
         hidden_noise = torch.randn_like(hidden_x0)
-        hidden_xt = self.q_sample(hidden_x0, hidden_noise, timesteps) * hidden_mask
+        hidden_xt = self.scheduler.q_sample(
+            x0=hidden_x0,
+            noise=hidden_noise,
+            timesteps=timesteps,
+            sqrt_alphas_cumprod=self.sqrt_alphas_cumprod,
+            sqrt_one_minus_alphas_cumprod=self.sqrt_one_minus_alphas_cumprod,
+        ) * hidden_mask
 
         hidden_pred = self.forward_hidden_denoiser(
             batch,
@@ -528,8 +347,17 @@ class SingleViewReconstructionDiffusion(nn.Module):
             timesteps=timesteps,
             hidden_xt=hidden_xt,
         )
-        hidden_target = self.prediction_target(hidden_x0, hidden_noise, timesteps)
-        hidden_loss = ((hidden_pred["hidden_pred"] - hidden_target) ** 2 * hidden_mask).sum() / hidden_mask.sum().clamp_min(1.0)
+        hidden_target = self.scheduler.prediction_target(
+            x0=hidden_x0,
+            noise=hidden_noise,
+            timesteps=timesteps,
+            sqrt_alphas_cumprod=self.sqrt_alphas_cumprod,
+            sqrt_one_minus_alphas_cumprod=self.sqrt_one_minus_alphas_cumprod,
+        )
+        hidden_loss = (
+            ((hidden_pred["hidden_pred"] - hidden_target) ** 2 * hidden_mask).sum()
+            / hidden_mask.sum().clamp_min(1.0)
+        )
         hidden_exist_loss = F.binary_cross_entropy_with_logits(hidden_pred["hidden_exist_logits"], hidden_mask_2d)
         hidden_cls_loss = self._class_loss(hidden_pred["hidden_cls_logits"], target.hidden_cls_gt, target.hidden_gt_mask)
 
@@ -588,30 +416,34 @@ class SingleViewReconstructionDiffusion(nn.Module):
         observation_ctx = self.encode_observation(batch)
         visible_ctx = self.decode_visible(batch, observation_ctx)
 
-        hidden_xt = torch.randn((batch_size, K_HID, _CONTINUOUS_DIM), device=device)
-        schedule = _sampling_schedule(self.train_timesteps, num_sampling_steps, device)
-        latest_pred: dict[str, torch.Tensor] | None = None
-
-        for index, timestep in enumerate(schedule):
-            t = torch.full((batch_size,), int(timestep.item()), device=device, dtype=torch.long)
-            hidden_pred = self.forward_hidden_denoiser(
+        def denoiser_step(xt: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+            return self.forward_hidden_denoiser(
                 batch,
                 observation_ctx=observation_ctx,
                 visible_ctx=visible_ctx,
                 timesteps=t,
-                hidden_xt=hidden_xt,
+                hidden_xt=xt,
+            )["hidden_pred"]
+
+        def prediction_to_x0_and_eps(prediction: torch.Tensor, xt: torch.Tensor, t: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+            return self.scheduler.prediction_to_x0_and_eps(
+                prediction=prediction,
+                xt=xt,
+                timesteps=t,
+                sqrt_alphas_cumprod=self.sqrt_alphas_cumprod,
+                sqrt_one_minus_alphas_cumprod=self.sqrt_one_minus_alphas_cumprod,
             )
-            latest_pred = hidden_pred
-            hidden_x0, hidden_eps = self._prediction_to_x0_and_eps(hidden_pred["hidden_pred"], hidden_xt, t)
 
-            if index == len(schedule) - 1:
-                hidden_xt = hidden_x0
-                break
-
-            prev_timestep = schedule[index + 1]
-            alpha_prev = self.sqrt_alphas_cumprod[int(prev_timestep.item())]
-            sigma_prev = self.sqrt_one_minus_alphas_cumprod[int(prev_timestep.item())]
-            hidden_xt = alpha_prev * hidden_x0 + sigma_prev * hidden_eps
+        hidden_x0 = sample_ddim_posterior(
+            x_shape=(batch_size, K_HID, _CONTINUOUS_DIM),
+            device=device,
+            train_timesteps=self.scheduler.train_timesteps,
+            sampling_steps=num_sampling_steps,
+            sqrt_alphas_cumprod=self.sqrt_alphas_cumprod,
+            sqrt_one_minus_alphas_cumprod=self.sqrt_one_minus_alphas_cumprod,
+            denoiser_step=denoiser_step,
+            prediction_to_x0_and_eps=prediction_to_x0_and_eps,
+        )
 
         final_t = torch.zeros((batch_size,), device=device, dtype=torch.long)
         final_pred = self.forward_hidden_denoiser(
@@ -619,12 +451,11 @@ class SingleViewReconstructionDiffusion(nn.Module):
             observation_ctx=observation_ctx,
             visible_ctx=visible_ctx,
             timesteps=final_t,
-            hidden_xt=hidden_xt,
+            hidden_xt=hidden_x0,
         )
-        latest_pred = final_pred if latest_pred is None else final_pred
 
         visible_exist_probs = torch.sigmoid(visible_ctx["visible_exist_logits"])
-        hidden_exist_probs = torch.sigmoid(latest_pred["hidden_exist_logits"])
+        hidden_exist_probs = torch.sigmoid(final_pred["hidden_exist_logits"])
         return {
             "layout": visible_ctx["layout_pred"],
             "visible": visible_ctx["visible_state"],
@@ -632,12 +463,12 @@ class SingleViewReconstructionDiffusion(nn.Module):
             "visible_exist_probs": visible_exist_probs,
             "visible_cls_logits": visible_ctx["visible_cls_logits"],
             "visible_cls_probs": torch.softmax(visible_ctx["visible_cls_logits"], dim=-1),
-            "hidden": hidden_xt,
-            "hidden_exist_logits": latest_pred["hidden_exist_logits"],
+            "hidden": hidden_x0,
+            "hidden_exist_logits": final_pred["hidden_exist_logits"],
             "hidden_exist_probs": hidden_exist_probs,
-            "hidden_cls_logits": latest_pred["hidden_cls_logits"],
-            "hidden_cls_probs": torch.softmax(latest_pred["hidden_cls_logits"], dim=-1),
-            "support_logits": latest_pred["support_logits"],
-            "floor_logits": latest_pred["floor_logits"],
-            "wall_logits": latest_pred["wall_logits"],
+            "hidden_cls_logits": final_pred["hidden_cls_logits"],
+            "hidden_cls_probs": torch.softmax(final_pred["hidden_cls_logits"], dim=-1),
+            "support_logits": final_pred["support_logits"],
+            "floor_logits": final_pred["floor_logits"],
+            "wall_logits": final_pred["wall_logits"],
         }
