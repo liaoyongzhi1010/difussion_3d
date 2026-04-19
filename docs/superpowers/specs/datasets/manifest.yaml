@@ -1,0 +1,43 @@
+# Expected on-disk layout and integrity checks for public benchmarks.
+# Sizes are approximate; checksums are filled in after a canonical render.
+
+threed_front:
+  source_url: https://tianchi.aliyun.com/specials/promotion/alibaba-3d-future
+  requires_eula: true
+  raw_layout:
+    path: data/external/3d_front/3D-FRONT
+    expected_files: 6813
+    approx_size_gb: 3
+  raw_future:
+    path: data/external/3d_front/3D-FUTURE-model
+    expected_dirs: 16563
+    approx_size_gb: 20
+  raw_texture:
+    path: data/external/3d_front/3D-FRONT-texture
+    approx_size_gb: 5
+  rendered:
+    path: data/external/3d_front/rendered
+    approx_packets_per_room: 4
+    split_file: data/external/3d_front/rendered/split.json
+    split_sha256: TBD-after-first-render
+    expected_train: TBD
+    expected_val: TBD
+    expected_test: TBD
+
+scannet:
+  source_url: https://github.com/ScanNet/ScanNet#scannet-data
+  requires_eula: true
+  requires_token: true
+  raw_root:
+    path: data/external/scannet/scans
+    expected_scenes: 1513
+    file_types_per_scene:
+      - .sens
+      - _vh_clean_2.ply
+      - .aggregation.json
+      - _vh_clean_2.0.010000.segs.json
+    approx_size_gb: 900
+  rendered:
+    path: data/external/scannet/rendered
+    split_file: data/external/scannet/rendered/split.json
+    split_sha256: TBD-after-first-render

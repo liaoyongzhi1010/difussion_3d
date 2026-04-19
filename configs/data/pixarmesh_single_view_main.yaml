@@ -1,0 +1,10 @@
+name: pixarmesh_single_view_real_main
+packet_mode: logical
+packet_cache_root: outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/packets
+view_root: outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/views
+image_root: outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/images
+split_json: outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/split_to_sample_ids.json
+split_summary: outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/index/summary.json
+image_size: 512
+load_inst_masks: false
+source_mix: [1.0, 0.0, 0.0]
