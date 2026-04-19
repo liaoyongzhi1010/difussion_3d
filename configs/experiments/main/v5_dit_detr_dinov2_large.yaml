@@ -1,0 +1,63 @@
+# Headline v5 config: DINOv2-large hybrid backbone + DiT hidden denoiser +
+# DETR-style variable-slot visible head + 3D chamfer/F-score/collision eval.
+#
+# Include chain (resolved left-to-right by engine.train_loop.load_config):
+#   1. data/pixarmesh.yaml             (real packet paths)
+#   2. backbones/dinov2_large_hybrid.yaml
+#   3. runtime/v5_smoke.yaml           (2k-step smoke defaults)
+
+include:
+  - ../../data/pixarmesh.yaml
+  - ../../backbones/dinov2_large_hybrid.yaml
+  - ../../runtime/v5_smoke.yaml
+
+model:
+  name: v5_dit_detr_dinov2_large
+  obs_channels: 4
+  image_size: 512
+  patch_size: 32
+  d_model: 1024
+  encoder_layers: 12
+  decoder_layers: 10
+  num_heads: 16
+  dropout: 0.1
+  ffn_ratio: 4
+  # v5 head switches -- consumed when we wire heads into scene_model.
+  visible_head:
+    type: detr
+    num_queries: 50
+    num_decoder_layers: 6
+    num_heads: 8
+    ffn_ratio: 4.0
+    dropout: 0.1
+  hidden_head:
+    type: dit
+    preset: large
+    cond_extra_dim: 0
+
+noise:
+  prediction_type: v_prediction
+  train_timesteps: 1000
+  beta_schedule: cosine
+  sampler: ddim
+  sampling_steps: 50
+
+loss:
+  lambda_layout: 1.0
+  lambda_visible_state: 2.5
+  lambda_visible_exist: 0.5
+  lambda_visible_cls: 0.5
+  lambda_hidden_state: 3.0
+  lambda_hidden_exist: 1.0
+  lambda_hidden_cls: 1.0
+  lambda_support: 0.5
+  lambda_wall: 0.25
+  lambda_floor: 0.25
+
+training:
+  max_steps: 2000
+  lr: 8.0e-5
+  weight_decay: 0.05
+  grad_clip: 1.0
+  warmup_steps: 200
+  log_every: 20

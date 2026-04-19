@@ -1,0 +1,7 @@
+# v5 with uniform timestep sampling (no occlusion-aware reweighting).
+include:
+  - ../main/v5_dit_detr_dinov2_large.yaml
+
+model:
+  name: v5_ablation_no_occlusion_bias
+  occlusion_bias: null

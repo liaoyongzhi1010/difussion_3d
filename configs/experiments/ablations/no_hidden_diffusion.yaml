@@ -1,0 +1,8 @@
+# Direct hidden regression (no diffusion) — sanity baseline.
+include:
+  - ../main/v5_dit_detr_dinov2_large.yaml
+
+model:
+  name: v5_ablation_no_hidden_diffusion
+  hidden_head:
+    type: direct_regression

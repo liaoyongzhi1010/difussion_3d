@@ -1,0 +1,16 @@
+# Visible-only reconstruction baseline (no hidden head), for amodal gain ablation.
+include:
+  - ../../data/pixarmesh.yaml
+  - ../../backbones/dinov2_base_frozen.yaml
+  - ../../runtime/v5_smoke.yaml
+
+model:
+  name: baseline_visible_only
+  arch: visible_only
+  d_model: 768
+
+training:
+  max_steps: 2000
+  lr: 1.0e-4
+  weight_decay: 0.05
+  grad_clip: 1.0

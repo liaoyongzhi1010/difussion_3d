@@ -1,0 +1,7 @@
+runtime:
+  seed: 0
+  device: cuda
+  num_workers: 2
+  pin_memory: true
+  batch_size: 4
+  output_dir: outputs/v5_dit_detr_dinov2_large_smoke

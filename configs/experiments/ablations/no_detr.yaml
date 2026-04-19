@@ -1,0 +1,8 @@
+# v5 with fixed K_VIS=12 visible head instead of DETR.
+include:
+  - ../main/v5_dit_detr_dinov2_large.yaml
+
+model:
+  name: v5_ablation_no_detr
+  visible_head:
+    type: fixed_k12

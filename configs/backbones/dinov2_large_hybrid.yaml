@@ -1,0 +1,16 @@
+model:
+  observation_backbone:
+    type: transformers_dinov2_hybrid
+    model_name: facebook/dinov2-large
+    image_size: 518
+    freeze_backbone: true
+    train_last_n_blocks: 8
+    allow_pseudo_rgb: false
+    aux_patch_size: 14
+    aux_channels: 4
+    aux_encoder_layers: 4
+    aux_num_heads: 16
+    fusion_layers: 3
+    fusion_heads: 16
+    ffn_ratio: 4.0
+    dropout: 0.1

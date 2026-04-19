@@ -1,0 +1,23 @@
+# Joint visible+hidden diffusion baseline (no direct visible regression).
+include:
+  - ../../data/pixarmesh.yaml
+  - ../../backbones/dinov2_large_hybrid.yaml
+  - ../../runtime/v5_smoke.yaml
+
+model:
+  name: baseline_fullscene_diffusion
+  arch: fullscene_diffusion
+  d_model: 1024
+
+noise:
+  prediction_type: v_prediction
+  train_timesteps: 1000
+  beta_schedule: cosine
+  sampler: ddim
+  sampling_steps: 50
+
+training:
+  max_steps: 2000
+  lr: 8.0e-5
+  weight_decay: 0.05
+  grad_clip: 1.0

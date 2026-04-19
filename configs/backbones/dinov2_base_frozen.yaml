@@ -1,0 +1,8 @@
+model:
+  observation_backbone:
+    type: transformers_dinov2
+    model_name: facebook/dinov2-base
+    image_size: 518
+    freeze_backbone: true
+    train_last_n_blocks: 0
+    allow_pseudo_rgb: false

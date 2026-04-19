@@ -1,0 +1,8 @@
+# v5 with baseline transformer-decoder hidden head instead of DiT.
+include:
+  - ../main/v5_dit_detr_dinov2_large.yaml
+
+model:
+  name: v5_ablation_no_dit
+  hidden_head:
+    type: baseline_transformer

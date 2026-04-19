@@ -1,0 +1,10 @@
+model:
+  observation_backbone:
+    type: patch_vit
+    image_size: 512
+    patch_size: 32
+    d_model: 512
+    encoder_layers: 8
+    num_heads: 8
+    ffn_ratio: 4.0
+    dropout: 0.1

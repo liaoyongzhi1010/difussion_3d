@@ -1,0 +1,9 @@
+data:
+  name: threedfront_main
+  loader: threedfront
+  layout_root: data/external/3d_front/3D-FRONT
+  future_root: data/external/3d_front/3D-FUTURE-model
+  rendered_root: data/external/3d_front/rendered
+  split_file: data/external/3d_front/rendered/split.json
+  split: train          # override at eval time
+  image_size: 512

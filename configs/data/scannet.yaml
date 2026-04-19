@@ -1,0 +1,8 @@
+data:
+  name: scannet_main
+  loader: scannet
+  raw_root: data/external/scannet/scans
+  rendered_root: data/external/scannet/rendered
+  split_file: data/external/scannet/rendered/split.json
+  split: train
+  image_size: 512
