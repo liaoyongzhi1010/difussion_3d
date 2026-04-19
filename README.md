@@ -1,143 +1,112 @@
 # Amodal Scene Diffusion
 
-This repository is now organized around one paper mainline only:
+Single-view 3D reconstruction with amodal completion: **direct reconstruction
+of visible content + conditional diffusion over hidden content**. The repo
+targets a CVPR/ICCV/NeurIPS-grade submission and is organized accordingly.
 
-- input: single real RGB view plus depth-derived observation channels
-- visible content: direct 3D reconstruction
-- hidden content: conditional diffusion completion
-- output: explicit scene-state codes that can be exported to 3D tri-plane representations
+## What's here
 
-Old `visible_locked / fullscene_control / selector` branches are no longer first-class entry points. They have been moved under [`legacy/`](/root/3d/generation/legacy) so the root repository reflects the actual paper path.
+- A single paper mainline (`v5_dit_detr_dinov2_large`) plus named ablations
+  and two reference baselines.
+- A public-benchmark path (3D-FRONT + ScanNet) alongside the private
+  pixarmesh dataset.
+- A top-venue 3D metric suite (Chamfer Distance, F-score@τ, hidden recall,
+  collision / support violation) as a small, tested library.
+- A clean training/evaluation engine and a multi-seed harness that reports
+  mean ± 95% CI.
 
-## Mainline Status
+## Directory layout
 
-Current mainline data root:
-- `outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm`
-
-Current room-level split:
-- train: `1555`
-- val: `179`
-- test: `215`
-- room overlap across splits: `0`
-
-Current strongest working checkpoint family:
-- config: [`configs/diffusion/single_view_visible_direct_hidden_diffusion_v3_dinov2_frozen.yaml`](/root/3d/generation/configs/diffusion/single_view_visible_direct_hidden_diffusion_v3_dinov2_frozen.yaml)
-- backbone: official `facebook/dinov2-base`
-- method: `visible direct reconstruction + hidden diffusion`
-
-## Repository Layout
-
-```text
-.
-├── configs/
-│   ├── data/                # dataset roots and split metadata
-│   ├── diffusion/           # single-view paper configs
-│   ├── geometry_vae/
-│   └── runtime/
-├── docs/                    # quickstart, reproducibility, audit notes
-├── examples/                # canonical train / eval / export commands
-├── legacy/                  # archived older baselines and utilities
-├── scripts/
-│   ├── preprocess/
-│   ├── train/
-│   ├── eval/
-│   └── ops/
-├── src/
-│   └── amodal_scene_diff/
-├── Makefile
-├── pyproject.toml
-└── requirements.txt
+```
+configs/
+  data/            # pixarmesh.yaml, threedfront.yaml, scannet.yaml
+  backbones/       # dinov2_base_frozen, dinov2_large_hybrid, patch_vit
+  experiments/
+    main/v5_dit_detr_dinov2_large.yaml
+    ablations/{no_dit,no_detr,no_hidden_diffusion,no_occlusion_bias}.yaml
+    baselines/{fullscene_diffusion,visible_only}.yaml
+  geometry_vae/
+  runtime/
+docs/
+  superpowers/specs/   # design specs + dataset acquisition scripts
+scripts/
+  data/            # dataset download shims
+  preprocess/
+  train/           # legacy v3/v4 driver (kept)
+  eval/
+src/amodal_scene_diff/
+  backbones/       # patch-ViT, DINOv2, DINOv2-hybrid
+  datasets/        # pixarmesh, threedfront, scannet
+  diffusion/       # scene_model, scheduler, sampler
+  engine/          # train_loop, eval_loop, seed_harness
+  geometry/        # GeometryVAE
+  heads/           # dit_hidden, detr_visible, layout, relation
+  metrics/         # chamfer, fscore, box_iou, hidden_recall, collision
+  structures/
 ```
 
-## What Is Paper-Grade Already
-
-- canonical `paper_mainline_harness` now guards the route before train / eval / export
-
-- `src/` package layout with installable code
-- room-level train/val/test split generation with disjoint rooms
-- real RGB restored into the packet pipeline
-- official DINOv2 observation backbone in the current best mainline
-- state-space evaluation for single-view reconstruction
-- render-space evaluation script for `PSNR / SSIM / LPIPS` on top-down semantic renders
-- explicit 3D export from predicted scene states to tri-plane scene representations
-
-## What Still Needs Upgrading
-
-These are the current weak points relative to top-conference-strength open codebases:
-
-- visible reconstruction head is still a custom transformer-set decoder, not yet a stronger DETR-style or geometry-native decoder stack
-- hidden diffusion branch is still an in-repo transformer denoiser, not yet a DiT-class latent diffusion backbone
-- geometry VAE is still a compact PointNet plus tri-plane decoder, not yet an LRM / InstantMesh-class geometry decoder
-- single-view training still needs a cleaner built-in validation hook instead of relying only on standalone eval scripts
-
-The detailed audit is recorded in [`docs/repo_audit.md`](/root/3d/generation/docs/repo_audit.md).
-
-## Installation
+## Quickstart
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-pip install -e .
+
+# 1. Smoke the v5 config (2 steps, exercises the scene model end-to-end)
+python -m amodal_scene_diff.engine.train_loop \
+  --config configs/experiments/main/v5_dit_detr_dinov2_large.yaml \
+  --train-steps 2
+
+# 2. 2k-step smoke training run
+python -m amodal_scene_diff.engine.train_loop \
+  --config configs/experiments/main/v5_dit_detr_dinov2_large.yaml
+
+# 3. Evaluate a checkpoint with the 3D metric suite
+python -m amodal_scene_diff.engine.eval_loop \
+  --config configs/experiments/main/v5_dit_detr_dinov2_large.yaml \
+  --checkpoint outputs/v5_dit_detr_dinov2_large_smoke/latest.pt \
+  --output-dir outputs/v5_dit_detr_dinov2_large_smoke/eval
+
+# 4. Three-seed run with 95% CI aggregation
+python -m amodal_scene_diff.engine.seed_harness \
+  --config configs/experiments/main/v5_dit_detr_dinov2_large.yaml \
+  --seeds 0 1 2 \
+  --output-root outputs/v5_seeds
 ```
 
-## Canonical Commands
+## Public datasets
 
-Run the route harness before large experiments:
+The pixarmesh packets used throughout development live under
+`outputs/real_data/pixarmesh_depr_bootstrap_train2048_norm/`. For
+paper-grade comparisons you additionally need:
 
-```bash
-make harness-single-view
-```
+- **3D-FRONT** — EULA-gated. See `docs/superpowers/specs/datasets/README.md`
+  for the download + render workflow.
+- **ScanNet** — token-gated. Same folder has the wrapper script.
 
-Train the mainline:
+Both datasets extract into `data/external/{3d_front,scannet}/rendered/` as
+`.pt` packets matching `PixarMeshPacketDataset`'s schema.
 
-```bash
-make train-single-view
-```
+## Design doc
 
-Evaluate state metrics on the test split:
+`docs/superpowers/specs/2026-04-18-top-venue-restructure-design.md` is the
+source of truth for this restructure: scope, deletions, new tree, commit
+plan, acceptance criteria, and what's deliberately out of scope.
 
-```bash
-make eval-single-view-state
-```
+## Status
 
-Evaluate render metrics on the test split:
+| Component                       | State                             |
+|---------------------------------|-----------------------------------|
+| Pixarmesh packets + split       | done                              |
+| DiT hidden denoiser             | implemented, config wiring TODO   |
+| DETR visible head               | implemented, config wiring TODO   |
+| 3D metric suite                 | done, smoke-tested                |
+| Engine (train/eval/seeds)       | done, `--help` verified           |
+| 3D-FRONT loader + render        | loader done; renderer TODO        |
+| ScanNet loader + render         | loader done; renderer TODO        |
+| v5 smoke training (2k steps)    | run via engine.train_loop         |
 
-```bash
-make eval-single-view-render
-```
+## License
 
-Run the unified stage board:
-
-```bash
-make pipeline-board
-```
-
-Export explicit 3D scene representations:
-
-```bash
-make export-single-view-repr
-```
-
-Restore packet RGB paths if packet metadata is incomplete:
-
-```bash
-make restore-rgb-paths
-```
-
-## Examples
-
-Canonical runnable examples live in:
-
-- [`examples/train_single_view_main.sh`](/root/3d/generation/examples/train_single_view_main.sh)
-- [`examples/eval_single_view_state.sh`](/root/3d/generation/examples/eval_single_view_state.sh)
-- [`examples/eval_single_view_render.sh`](/root/3d/generation/examples/eval_single_view_render.sh)
-- [`examples/export_single_view_repr.sh`](/root/3d/generation/examples/export_single_view_repr.sh)
-
-## Documentation
-
-- [`docs/quickstart.md`](/root/3d/generation/docs/quickstart.md)
-- [`docs/dataset_layout.md`](/root/3d/generation/docs/dataset_layout.md)
-- [`docs/reproducibility.md`](/root/3d/generation/docs/reproducibility.md)
-- [`docs/formal_paper_mainline.md`](/root/3d/generation/docs/formal_paper_mainline.md)
-- [`docs/repo_audit.md`](/root/3d/generation/docs/repo_audit.md)
+See upstream model licenses for DINOv2 (Meta) and any weights pulled from
+HuggingFace. Dataset terms (3D-FRONT Alibaba, ScanNet Stanford) bind each
+downstream user individually.

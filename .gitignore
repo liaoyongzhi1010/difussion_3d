@@ -15,7 +15,6 @@ venv/
 outputs/
 /data/
 notes/
-TASKS.md
 monitor_gpu.sh
 
 # Checkpoints / model artifacts

@@ -1,66 +1,75 @@
 # Paper Results
 
-Last updated: 2026-04-08 (UTC)
+Paper-facing results table. Cells marked `—` are pending runs scheduled in
+`TASKS.md`.
 
-## Canonical Mainline
+## Main comparison
 
-- config: `configs/diffusion/visible_locked_occbias_v0625.yaml`
-- checkpoint: `outputs/real_data/pixarmesh_bootstrap_visiblelocked_occbias_v0625_ft_b128_train2048/checkpoints_scene_denoiser_v1/step_0034000.pt`
-- principle: visible reconstruction stays deterministic while hidden structure remains diffusion-sampled
+Dataset-by-dataset comparison of the v5 headline against baselines. All
+metrics reported as mean ± 95% CI over 3 seeds (Student-t, 2-tailed) via
+`engine.seed_harness`. Chamfer Distance (CD) is symmetric, in meters;
+F-score@τ follows the InstPIFu protocol; hidden-recall (H-Rec) uses
+3D-IoU ≥ 0.25 matching.
 
-## Current Main Result
+### pixarmesh (1555 / 179 / 215 room-disjoint split)
 
-- visible_mse: `1.4348`
-- hidden_mse: `37.8811`
-- best_hidden_mse: `20.7404`
-- hidden_diversity: `4.2278`
-- joint_confidence_hidden_mse: `36.7389`
+| Model                               | CD ↓ (scene) | CD ↓ (hidden) | F@1cm ↑ | F@2cm ↑ | F@5cm ↑ | H-Rec ↑ |
+|-------------------------------------|--------------|---------------|---------|---------|---------|---------|
+| visible-only baseline               | —            | —             | —       | —       | —       | —       |
+| fullscene diffusion baseline        | —            | —             | —       | —       | —       | —       |
+| v5 (DiT + DETR + DINOv2-large)      | —            | —             | —       | —       | —       | —       |
 
-## Delta Vs Previous Mainline
+### 3D-FRONT (public, EULA-gated)
 
-- visible_mse delta vs v0.50: `-0.1430`
-- hidden_mse delta vs v0.50: `-7.9212`
-- best_hidden_mse delta vs v0.50: `-6.8329`
+| Model                               | CD ↓ (scene) | CD ↓ (hidden) | F@1cm ↑ | F@2cm ↑ | F@5cm ↑ | H-Rec ↑ |
+|-------------------------------------|--------------|---------------|---------|---------|---------|---------|
+| Total3D (re-run)                    | —            | —             | —       | —       | —       | —       |
+| InstPIFu (re-run)                   | —            | —             | —       | —       | —       | —       |
+| v5 (DiT + DETR + DINOv2-large)      | —            | —             | —       | —       | —       | —       |
 
-## Generator Ablations
+### ScanNet (public, token-gated)
 
-- Hidden-focus: visible_mse `23.5178`, hidden_mse `76.0081`, best_hidden_mse `45.9816`
-- Hidden-only: visible_mse `51.4273`, hidden_mse `50.1519`, best_hidden_mse `32.0212`
-- OccBias v0.25: visible_mse `2.1862`, hidden_mse `50.7607`, best_hidden_mse `32.6084`
-- OccBias v0.375: visible_mse `1.7726`, hidden_mse `46.7508`, best_hidden_mse `26.3023`
-- OccBias v0.50: visible_mse `1.5778`, hidden_mse `45.8023`, best_hidden_mse `27.5733`
-- OccBias v0.625: visible_mse `1.4348`, hidden_mse `37.8811`, best_hidden_mse `20.7404`
-- Tradeoff v0.50: visible_mse `1.937`, hidden_mse `49.5562`, best_hidden_mse `30.9414`
-- Tradeoff v0.25: visible_mse `3.0832`, hidden_mse `42.7002`, best_hidden_mse `25.976`
-- Full-scene diffusion: visible_mse `52.6114`, hidden_mse `118.0611`, best_hidden_mse `90.5085`
+| Model                               | CD ↓ (scene) | CD ↓ (hidden) | F@1cm ↑ | F@2cm ↑ | F@5cm ↑ | H-Rec ↑ |
+|-------------------------------------|--------------|---------------|---------|---------|---------|---------|
+| v5 (DiT + DETR + DINOv2-large)      | —            | —             | —       | —       | —       | —       |
 
-## Posterior Sweep
+## Ablations (pixarmesh)
 
-- Visible-locked resume p5: p=`5`, hidden_mse `62.6609`, best_hidden_mse `40.4625`, joint_hidden_mse ``
-- Visible-locked resume p20: p=`20`, hidden_mse `64.1932`, best_hidden_mse `30.5159`, joint_hidden_mse ``
-- Visible-locked resume p50: p=`50`, hidden_mse `63.7958`, best_hidden_mse `24.1925`, joint_hidden_mse ``
-- Visible-locked resume p100: p=`100`, hidden_mse `63.9417`, best_hidden_mse `23.1496`, joint_hidden_mse ``
-- OccBias v0.50 p5: p=`5`, hidden_mse `45.8023`, best_hidden_mse `27.5733`, joint_hidden_mse ``
-- OccBias v0.50 p20: p=`20`, hidden_mse `45.7991`, best_hidden_mse `19.6681`, joint_hidden_mse ``
-- OccBias v0.50 p50: p=`50`, hidden_mse `45.7367`, best_hidden_mse `16.3746`, joint_hidden_mse ``
-- OccBias v0.50 p100: p=`100`, hidden_mse `45.6272`, best_hidden_mse `13.9004`, joint_hidden_mse ``
-- OccBias v0.625 p5: p=`5`, hidden_mse `37.8811`, best_hidden_mse `20.7404`, joint_hidden_mse `36.7389`
-- OccBias v0.625 p20: p=`20`, hidden_mse `38.0607`, best_hidden_mse `13.5215`, joint_hidden_mse `38.7456`
-- OccBias v0.625 p50: p=`50`, hidden_mse `38.2726`, best_hidden_mse `11.0169`, joint_hidden_mse `39.3989`
+Same metric suite, same split, same budget (2k–10k steps depending on
+whether we're running smoke or production).
 
-## Selector Status
+| Ablation                  | CD ↓ (scene) | CD ↓ (hidden) | F@2cm ↑ | H-Rec ↑ |
+|---------------------------|--------------|---------------|---------|---------|
+| v5 (all on)               | —            | —             | —       | —       |
+| − DiT (baseline decoder)  | —            | —             | —       | —       |
+| − DETR (fixed K=12)       | —            | —             | —       | —       |
+| − hidden diffusion        | —            | —             | —       | —       |
+| − occlusion bias          | —            | —             | —       | —       |
 
-- best lightweight selector remains `Selector small b4/p8` with selected_hidden_mse `39.4621` on top of v0.50
-- conclusion: selector capacity is not the limiting factor; generator posterior quality is
+## Posterior-sweep analysis
 
-## Generated Tables
+| Method               | steps | posteriors (p) | samples (s) | best hidden MSE ↓ |
+|----------------------|-------|----------------|-------------|-------------------|
+| v3 (reference)       | 20k   | 5              | 20          | 20.74             |
+| v5                   | —     | —              | —           | —                 |
 
-- `outputs/tables/table_c_posterior.csv`
-- `outputs/tables/table_d_ablation.csv`
-- `outputs/tables/table_f_baseline_tracker.csv`
-- `outputs/tables/table_g_selector.csv`
+## Physical-plausibility proxies (pixarmesh)
 
-## Example Figures
+| Model                | Collision ↓ | Support violation ↓ |
+|----------------------|-------------|---------------------|
+| v5                   | —           | —                   |
 
-- `examples/figures/visible_locked_occbias_v0625_main/contact_sheet.png`
-- `examples/figures/visible_locked_occbias_v0625_main/*.png`
+## Compute
+
+Runs are executed on a single A6000 (48 GB). The headline v5 config
+(`configs/experiments/main/v5_dit_detr_dinov2_large.yaml`) targets bf16 with
+`batch_size=4` and gradient accumulation where needed; see each run's
+`config.resolved.yaml` for the exact resolved config.
+
+## Reproducibility
+
+Tables above are produced by
+`python scripts/benchmark/make_paper_tables.py` (pending) consuming
+`outputs/v5_seeds/**/eval/summary.json` plus each baseline's run directory.
+Every number should remain reproducible from `{config.resolved.yaml,
+latest.pt}`.
